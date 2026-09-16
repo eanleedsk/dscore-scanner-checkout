@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Dentsply Sirona Korea | Scanner Booking</title>
+  <link rel="icon" href="./static/icons/scanner-icon-192.png">
+  <meta name="theme-color" content="#0A2540">
+  <link rel="stylesheet" as="style" crossorigin
+        href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+  <style>
+    :root {
+      /* 2026-09-10 사장님 요청 - 예약 달력과 같은 "덴츠플라이시로나 스타일"
+         네이비/앰버 톤으로 맞춤. 대여중=파란색, 예약됨=앰버로 달력과 색을
+         통일했다(같은 상태는 어느 화면에서 봐도 같은 색이어야 헷갈리지 않음). */
+      --navy: #0A2540; --brand: #EA7600; --brand-dark: #C96200;
+      --bg: #F4F6F9; --surface: #fff; --border: #E2E8F0;
+      --text: #0F1B2D; --muted: #64748B;
+      --ok-bg: #E4F4EE; --ok-text: #127A5B;
+      --held-bg: #E7EFFC; --held-text: #3F6FBE;
+      --reserved-bg: #FBF0DC; --reserved-text: #B36A00;
+      --overdue-bg: #FBE1E1; --overdue-text: #B5140A;
+      --maint-bg: #F1EAFB; --maint-text: #7C5CBF;
+    }
+    * { box-sizing: border-box; }
+    /* 버튼을 연달아 빠르게 누르면 브라우저가 "두 번 눌러서 확대"로 착각해 화면이
+       확대/축소되는 문제가 있었다(2026-09-09 사장님 요청) - 버튼은 확대용이
+       아니므로 전부 꺼둔다. */
+    button { touch-action: manipulation; }
+    body {
+      margin: 0; padding: 18px; background: var(--bg); color: var(--text);
+      font-family: 'Pretendard', -apple-system, "Malgun Gothic", sans-serif;
+      animation: pageFadeIn .35s ease;
+    }
+    @keyframes pageFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .top {
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+      gap: 10px; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--border);
+    }
+    .brand { display: flex; align-items: center; gap: 9px; }
+    .brand-mark {
+      width: 30px; height: 30px; border-radius: 8px; background: var(--navy); color: #fff;
+      display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12.5px;
+      flex: none;
+    }
+    .brand-text { display: flex; flex-direction: column; line-height: 1.25; }
+    .brand-name { font-size: 13px; font-weight: 800; color: var(--navy); letter-spacing: -.1px; }
+    .brand-sub { font-size: 10.5px; font-weight: 600; color: var(--muted); }
+    .updated { font-size: 12px; color: var(--muted); }
+    .refresh-btn {
+      border: none; background: var(--navy); color: #fff;
+      font-weight: 700; font-size: 12.5px; padding: 8px 12px; border-radius: 8px; cursor: pointer;
+      font-family: inherit;
+    }
+    .summary { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+    .summary .tile {
+      flex: 1; min-width: 90px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 14px; text-align: center;
+      box-shadow: 0 1px 2px rgba(10,37,64,0.05);
+    }
+    .summary .tile .num { font-size: 22px; font-weight: bold; font-variant-numeric: tabular-nums; }
+    .summary .tile .lbl { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+    .section-label { font-size: 12px; color: var(--muted); font-weight: bold; margin: 18px 0 8px; }
+    .row {
+      display: flex; align-items: center; gap: 12px; background: var(--surface);
+      border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px;
+      box-shadow: 0 1px 2px rgba(10,37,64,0.05);
+    }
+    .row .stripe { width: 5px; align-self: stretch; border-radius: 3px; flex: none; }
+    .row .main { flex: 1; min-width: 0; }
+    .row .name { font-size: 14.5px; font-weight: bold; }
+    .row .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .row .holder { font-size: 13px; margin-top: 4px; }
+    .badge {
+      flex: none; font-size: 11.5px; font-weight: bold; padding: 5px 10px; border-radius: 20px;
+      white-space: nowrap;
+    }
+    .badge.available { background: var(--ok-bg); color: var(--ok-text); }
+    .badge.held { background: var(--held-bg); color: var(--held-text); }
+    .badge.reserved { background: var(--reserved-bg); color: var(--reserved-text); }
+    .badge.overdue { background: var(--overdue-bg); color: var(--overdue-text); }
+    .badge.maintenance { background: var(--maint-bg); color: var(--maint-text); }
+    .row .maint-note { font-size: 12px; color: var(--maint-text); margin-top: 4px; }
+    .model-group-label { font-size: 11.5px; font-weight: bold; margin: 10px 2px 6px; }
+    .model-group-label:first-child { margin-top: 0; }
+    .empty { color: var(--muted); font-size: 13px; padding: 8px 2px; }
+    .bottom-link {
+      display: block; text-align: center; margin-top: 22px; font-size: 13px;
+      color: var(--brand); text-decoration: none; font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand">
+    <span class="brand-mark">DS</span>
+    <div class="brand-text">
+      <span class="brand-name">Dentsply Sirona</span>
+      <span class="brand-sub">쇼룸 스캐너 현황판</span>
+    </div>
+  </div>
+  <div style="display:flex; align-items:center; gap:10px;">
+    <span class="updated" id="updatedAt">불러오는 중...</span>
+    <button class="refresh-btn" id="refreshBtn" type="button">새로고침</button>
+  </div>
+</div>
+
+<div class="summary" id="summary"></div>
+
+<div id="activeSection">
+  <div class="section-label">지금 대여중 / 예약됨</div>
+  <div id="activeList"><div class="empty">불러오는 중...</div></div>
+</div>
+
+<div id="maintenanceSection">
+  <div class="section-label">점검/수리중</div>
+  <div id="maintenanceList"><div class="empty">불러오는 중...</div></div>
+</div>
+
+<div id="availableSection">
+  <div class="section-label">사용가능</div>
+  <div id="availableList"><div class="empty">불러오는 중...</div></div>
+</div>
+
+<div style="display:flex; justify-content:center; gap:18px; margin-top:22px;">
+  <a class="bottom-link" style="margin-top:0;" href="index.html">예약 달력에서 예약하기 →</a>
+  <a class="bottom-link" style="margin-top:0;" href="scanner_app.html">직접 스캐너 선택 →</a>
+</div>
+
+<script src="./static/scanner-ui.js"></script>
+<script>
+  // 2026-09-16 추가 - 파이썬 사이트 없이 구글 Apps Script와 직접 통신한다.
+  var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzhUKOf5h55fg5-lGDKuS7N_6qGppE8okgRWj_BSgvjwTZzBE6ObN8zNJeqJokQZS7Z/exec';
+  var APPS_SCRIPT_TOKEN = 'e15f4d1e8766c80d0f2979713a49b7fe';
+
+  var MODEL_COLORS = { 'PS C': '#1E6FBF', 'PS 2': '#7A4FBF' };
+  function modelColor(model) { return MODEL_COLORS[model] || '#8B9698'; }
+  function el(id) { return document.getElementById(id); }
+
+  function badgeInfo(s) {
+    if (s.display_status === 'held') {
+      return s.overdue
+          ? { cls: 'overdue', text: '대여중 (기한 지남)' }
+          : { cls: 'held', text: '대여중' };
+    }
+    if (s.display_status === 'reserved') return { cls: 'reserved', text: '예약됨' };
+    if (s.maintenance) return { cls: 'maintenance', text: '🔧 점검중' };
+    return { cls: 'available', text: '사용가능' };
+  }
+
+  function rowHtml(s) {
+    var b = badgeInfo(s);
+    var holderLine = '';
+    if (s.display_status !== 'available') {
+      holderLine = '<div class="holder">' + s.holder + '님' +
+          (s.start_date ? (' · ' + s.start_date + ' ~ ' + (s.expected_return || '')) : '') + '</div>';
+    } else if (s.maintenance && s.maintenance_note) {
+      holderLine = '<div class="maint-note">🔧 ' + s.maintenance_note + '</div>';
+    }
+    return '' +
+      '<div class="row">' +
+        '<div class="stripe" style="background:' + modelColor(s.model) + '"></div>' +
+        '<div class="main">' +
+          '<div class="name">' + s.label + ' · ' + s.scanner_id + '</div>' +
+          holderLine +
+        '</div>' +
+        '<span class="badge ' + b.cls + '">' + b.text + '</span>' +
+      '</div>';
+  }
+
+  // PS C / PS 2 순서로 그룹 나눠서 보여준다(2026-09-09 사장님 요청). list는 이미
+  // 원하는 우선순위(기한지남>대여중>예약됨, 또는 원래 시트 순서)로 정렬돼 있으므로
+  // 그 순서는 그대로 유지한 채 모델별로만 다시 묶는다.
+  function groupedHtml(list) {
+    var out = '';
+    ['PS C', 'PS 2'].forEach(function(model) {
+      var group = list.filter(function(s) { return s.model === model; });
+      if (!group.length) return;
+      out += '<div class="model-group-label" style="color:' + modelColor(model) + '">' + model + '</div>';
+      out += group.map(rowHtml).join('');
+    });
+    return out;
+  }
+
+  function render(cfg) {
+    var scanners = cfg.scanners || [];
+    // 아직 구글 Apps Script를 새 버전으로 재배포하기 전이라 display_status 값이
+    // 없을 수도 있다 - 그럴 땐 기존 status 값으로 대신 채워서 화면이 깨지지
+    // 않게 한다(2026-09-09, 재배포 전후 호환).
+    scanners.forEach(function(s) { if (!s.display_status) s.display_status = s.status; });
+    var held = scanners.filter(function(s) { return s.display_status === 'held'; });
+    var reserved = scanners.filter(function(s) { return s.display_status === 'reserved'; });
+    // 점검/수리중(2026-09-10 사장님 요청)은 "사용가능"이 아니라 따로 보여준다 -
+    // display_status가 available이어도 maintenance가 켜져 있으면 여기로 뺀다.
+    var maintenance = scanners.filter(function(s) { return s.display_status === 'available' && s.maintenance; });
+    var available = scanners.filter(function(s) { return s.display_status === 'available' && !s.maintenance; });
+    var overdue = held.filter(function(s) { return s.overdue; });
+
+    el('summary').innerHTML =
+      '<div class="tile"><div class="num">' + scanners.length + '</div><div class="lbl">전체</div></div>' +
+      '<div class="tile"><div class="num" style="color:var(--held-text)">' + held.length + '</div><div class="lbl">대여중</div></div>' +
+      '<div class="tile"><div class="num" style="color:var(--reserved-text)">' + reserved.length + '</div><div class="lbl">예약됨</div></div>' +
+      '<div class="tile"><div class="num" style="color:var(--ok-text)">' + available.length + '</div><div class="lbl">사용가능</div></div>' +
+      (overdue.length ? '<div class="tile"><div class="num" style="color:var(--overdue-text)">' + overdue.length + '</div><div class="lbl">기한 지남</div></div>' : '') +
+      (maintenance.length ? '<div class="tile"><div class="num" style="color:var(--maint-text)">' + maintenance.length + '</div><div class="lbl">점검중</div></div>' : '');
+
+    var active = held.concat(reserved).sort(function(a, b) {
+      // 기한 지난 것 먼저, 그다음 대여중, 그다음 예약됨.
+      var score = function(s) { return s.overdue ? 0 : (s.display_status === 'held' ? 1 : 2); };
+      return score(a) - score(b);
+    });
+    el('activeList').innerHTML = active.length
+        ? groupedHtml(active)
+        : '<div class="empty">지금 대여중이거나 예약된 스캐너가 없습니다.</div>';
+    el('activeSection').style.display = active.length ? '' : 'none';
+
+    el('maintenanceList').innerHTML = maintenance.length ? groupedHtml(maintenance) : '';
+    el('maintenanceSection').style.display = maintenance.length ? '' : 'none';
+
+    el('availableList').innerHTML = available.length
+        ? groupedHtml(available)
+        : '<div class="empty">사용가능한 스캐너가 없습니다.</div>';
+
+    el('updatedAt').textContent = '방금 업데이트됨 (' + new Date().toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'}) + ')';
+  }
+
+  function load() {
+    fetch(APPS_SCRIPT_URL + '?action=config&token=' + APPS_SCRIPT_TOKEN)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (window.dsCheckMaintenance_(data)) return;
+        render(data);
+      })
+      .catch(function(err) {
+        el('updatedAt').textContent = '불러오지 못했습니다: ' + err;
+      });
+  }
+
+  el('refreshBtn').onclick = load;
+  load();
+  setInterval(load, 20000); // 화면을 켜두고 보는 용도라 20초마다 자동 새로고침
+</script>
+</body>
+</html>
