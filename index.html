@@ -1,0 +1,1657 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Dentsply Sirona Korea | Scanner Booking</title>
+  <link rel="manifest" href="./static/scanner-manifest.json">
+  <link rel="icon" href="./static/icons/scanner-icon-192.png">
+  <link rel="apple-touch-icon" href="./static/icons/scanner-apple-touch-icon.png">
+  <meta name="theme-color" content="#0A2540">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Scanner Booking">
+  <link rel="stylesheet" as="style" crossorigin
+        href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+  <style>
+    :root {
+      /* 2026-09-10 사장님 요청 - "덴츠플라이시로나 스타일의 모던 B2B SaaS
+         대시보드"로 전면 리디자인: 딥 네이비(구조/헤더)와 앰버(강조/CTA)를
+         기본 톤으로, 상태 색상은 파스텔에 가깝게 눈이 편안한 톤으로 다시 잡았다.
+         --brand는 기존에 이 파일 전체(확인창/버튼/스텝퍼 등)에서 두루 쓰이던
+         변수라, 값만 앰버로 바꿔서 아래쪽 기존 스타일들이 자동으로 새 톤을
+         따라가게 했다(참조하는 곳을 일일이 다 안 고쳐도 됨). */
+      --navy: #0A2540; --navy-soft: #13315A;
+      --brand: #EA7600; --brand-dark: #C96200;
+      --bg: #F4F6F9; --surface: #fff; --border: #E2E8F0;
+      --text: #0F1B2D; --muted: #64748B;
+      --held: #4A7FD1; --held-bg: #E7EFFC;
+      --reserved: #D99A34; --reserved-bg: #FBF0DC;
+      --today: rgba(234,118,0,0.09);
+      --holiday-tint: rgba(194,59,50,0.055);
+      --maint: #7C5CBF; --maint-bg: #F1EAFB;
+      --row-hover: rgba(10,37,64,0.045);
+    }
+    * { box-sizing: border-box; }
+    /* 버튼을 연달아 빠르게 누르면(이전달/다음달, −/+ 등) 브라우저가 "두 번 눌러서
+       확대"로 착각해 화면이 확대/축소되는 문제가 있었다(2026-09-09 사장님 요청).
+       버튼은 애초에 확대용이 아니므로 전부 이 동작을 꺼둔다. */
+    button { touch-action: manipulation; }
+    body {
+      margin: 0; padding: 16px; background: var(--bg); color: var(--text);
+      font-family: 'Pretendard', -apple-system, "Malgun Gothic", sans-serif;
+      animation: pageFadeIn .35s ease;
+    }
+    @keyframes pageFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .page-loading-overlay {
+      position: fixed; inset: 0; z-index: 999; background: var(--bg);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 14px; transition: opacity .25s ease;
+    }
+    .page-loading-overlay.fade-out { opacity: 0; pointer-events: none; }
+    .page-loading-overlay.hidden { display: none; }
+    .page-loading-mark {
+      width: 42px; height: 42px; border-radius: 11px; background: var(--navy); color: #fff;
+      display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px;
+    }
+    .page-loading-spinner {
+      width: 24px; height: 24px; border-radius: 50%; border: 3px solid var(--border);
+      border-top-color: var(--brand); animation: pageLoadingSpin .7s linear infinite;
+    }
+    @keyframes pageLoadingSpin { to { transform: rotate(360deg); } }
+    .page-loading-text { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+
+    /* ---- 상단 헤더: 브랜드 배지 + 월 이동 + 범례 칩 + 가이드 버튼 ---- */
+    .app-header {
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+      gap: 10px 18px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border);
+    }
+    .brand { display: flex; align-items: center; gap: 9px; }
+    .brand-mark {
+      width: 30px; height: 30px; border-radius: 8px; background: var(--navy); color: #fff;
+      display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12.5px;
+      letter-spacing: .2px; flex: none;
+    }
+    .brand-text { display: flex; flex-direction: column; line-height: 1.25; }
+    .brand-name { font-size: 13px; font-weight: 800; color: var(--navy); letter-spacing: -.1px; }
+    .brand-sub { font-size: 10.5px; font-weight: 600; color: var(--muted); }
+    .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .month-nav { display: flex; align-items: center; gap: 4px; background: var(--surface);
+      border: 1px solid var(--border); border-radius: 9px; padding: 4px; }
+    .month-nav .nav-arrow {
+      width: 28px; height: 28px; border-radius: 6px; border: none; background: transparent;
+      color: var(--navy); font-size: 16px; font-weight: bold; cursor: pointer; font-family: inherit;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .month-nav .nav-arrow:active { background: var(--bg); }
+    .month-nav .month-label { font-size: 12.5px; font-weight: 700; color: var(--navy); padding: 0 6px; white-space: nowrap; }
+    .month-nav .today-btn {
+      margin-left: 2px; border: none; background: var(--navy); color: #fff; font-weight: 700;
+      font-size: 11.5px; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-family: inherit;
+    }
+    .legend-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700;
+      padding: 5px 9px; border-radius: 999px; white-space: nowrap;
+    }
+    .chip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .chip-held { background: var(--held-bg); color: var(--held); }
+    .chip-held i { background: var(--held); }
+    .chip-reserved { background: var(--reserved-bg); color: var(--brand-dark); }
+    .chip-reserved i { background: var(--reserved); }
+    .chip-today { background: var(--today); color: var(--brand-dark); }
+    .chip-today i { background: var(--brand); }
+    .guide-btn {
+      width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--border);
+      background: var(--surface); color: var(--muted); font-size: 12.5px; font-weight: 800;
+      cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center;
+      flex: none;
+    }
+    .guide-btn:active { background: var(--bg); }
+
+    .gantt-wrap {
+      overflow-x: auto; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; -webkit-overflow-scrolling: touch;
+    }
+    .gantt {
+      display: grid;
+      position: relative;
+    }
+    .label {
+      position: sticky; left: 0; z-index: 3; background: var(--surface);
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 0 10px; font-size: 12.5px; font-weight: 700; border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      color: var(--text); transition: background .12s ease;
+    }
+    .label .sub {
+      font-weight: 500; color: var(--muted); font-size: 10.5px; margin-top: 1px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .model-divider-band { cursor: pointer; }
+    .model-divider-label {
+      position: sticky; left: 0; z-index: 3; cursor: pointer;
+      display: flex; align-items: center; gap: 6px; padding: 0 10px;
+      color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .2px;
+    }
+    /* PS C / PS 2 그룹 접기·펼치기 화살표(2026-09-10 사장님 요청 - "토글 아코디언
+       기능 포함") - 펼쳐진 상태는 아래쪽을 향하고, 접히면 위로 회전한다. */
+    .group-chevron {
+      display: inline-block; font-size: 9px; transition: transform .18s ease; flex: none;
+    }
+    .group-chevron.collapsed { transform: rotate(-90deg); }
+    .corner {
+      position: sticky; left: 0; top: 0; z-index: 5; background: var(--surface);
+      border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    }
+    .date-head {
+      position: sticky; top: 0; z-index: 4; background: var(--surface);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      font-size: 10.5px; color: var(--muted); border-bottom: 1px solid var(--border);
+      line-height: 1.3; padding: 4px 0; white-space: nowrap;
+    }
+    .date-head.weekend { color: #C23B32; }
+    .holiday-name {
+      font-size: 8px; font-weight: 700; color: #C23B32; margin-top: 1px;
+      max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+    }
+    .date-head b { font-size: 12px; color: var(--text); font-weight: 700; }
+    /* 오늘 날짜는 숫자를 작은 칩(알약 배지)으로 한 번 더 강조한다(2026-09-10
+       사장님 요청 - "날짜 헤더는... 날짜 칩을 적용해 눈에 띄게"). */
+    .date-head.is-today b {
+      background: var(--brand); color: #fff; border-radius: 999px; padding: 1px 7px;
+    }
+    .row-bg { border-bottom: 1px solid var(--border); transition: background .12s ease; }
+    /* 예전엔 배경 무늬(repeating-linear-gradient)로 세로 구분선을 흉내냈는데,
+       기기 화면 배율에 따라 실제 칸 경계랑 살짝 어긋나 보이는 문제가 있었다
+       (2026-09-09 사장님 요청 - "모바일로 볼 때 줄이 흐트러지지 않게"). 이제는
+       각 날짜 칸(day-cell)이 스스로 오른쪽 테두리를 그려서 항상 정확히 맞는다. */
+    .day-cell { border-right: 1px solid var(--border); box-sizing: border-box; transition: background .12s ease; }
+    .today-col { background: var(--today); }
+    /* 추석 등 공휴일은 그 날짜 칸 전체를 연한 붉은 음영으로 구분한다(2026-09-10
+       사장님 요청 - "휴일은 연한 붉은 텍스트와 음영으로 구분해줘"). */
+    .holiday-col { background: var(--holiday-tint); }
+    .day-cell.free { cursor: pointer; }
+    .day-cell.free:hover, .day-cell.free:active { background: rgba(234,118,0,0.16); }
+    .day-cell.pending-start {
+      background: rgba(234,118,0,0.24); outline: 2px solid var(--brand); outline-offset: -2px;
+    }
+    /* 마우스로 스캐너 행을 훑을 때 그 행 전체(이름칸+날짜칸)가 부드러운 회색으로
+       같이 밝아진다(2026-09-10 사장님 요청 - "호버 시 해당 행 전체가 하이라이트").
+       터치 화면에는 hover 자체가 없어서 이 스타일은 동작에 영향을 주지 않는다. */
+    .row-hover.label, .row-hover.row-bg, .row-hover.day-cell { background: var(--row-hover); }
+    /* 확인창이 뜨고 닫힐 때 부드럽게 움직이도록(2026-09-09 사장님 요청 - "창이
+       뚝뚝 켜지는건 딱딱해보여") 배경은 서서히 어두워지고, 시트는 아래에서
+       살짝 떠오르듯 나타난다. openSheetAnim_()/closeSheetAnim_()으로 켠다. */
+    .confirm-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0); z-index: 50;
+      display: flex; align-items: flex-end; justify-content: center;
+      transition: background .25s ease;
+    }
+    .confirm-backdrop.cb-in { background: rgba(0,0,0,0.45); }
+    .confirm-sheet {
+      background: var(--surface); border-radius: 16px 16px 0 0; padding: 20px 20px 24px;
+      width: 100%; max-width: 420px; box-shadow: 0 -4px 24px rgba(0,0,0,0.18);
+      transform: translateY(28px); opacity: 0;
+      transition: transform .28s cubic-bezier(.2,.8,.2,1), opacity .22s ease;
+    }
+    .confirm-backdrop.cb-in .confirm-sheet { transform: translateY(0); opacity: 1; }
+    .confirm-sheet h3 { margin: 0 0 8px; font-size: 17px; }
+    .confirm-sheet p { margin: 0 0 16px; font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+    /* 대여 확정 전에 지난번 보관 위치 사진을 미리 보여준다(2026-09-09 사장님
+       요청 - "대여할게요를 누르기 전에 화면에 현재 위치가 나올 수 있게"). */
+    .cs-location {
+      display: flex; align-items: center; gap: 10px; margin: -4px 0 16px;
+      padding: 8px 10px; background: var(--bg); border-radius: 10px;
+    }
+    .cs-location img {
+      width: 52px; height: 52px; border-radius: 8px; object-fit: cover;
+      border: 1.5px solid var(--border); flex: none; cursor: zoom-in;
+    }
+    .cs-location-loading {
+      width: 52px; height: 52px; border-radius: 8px; flex: none;
+      background: var(--border); font-size: 10px; color: var(--muted);
+      display: flex; align-items: center; justify-content: center; text-align: center;
+    }
+    .cs-location span { font-size: 12.5px; color: var(--muted); font-weight: bold; }
+    .confirm-sheet .btn-row { display: flex; gap: 10px; }
+    .confirm-sheet button {
+      flex: 1; padding: 16px; border-radius: 10px; font-size: 15.5px; font-weight: bold;
+      border: none; font-family: inherit; cursor: pointer;
+    }
+    .confirm-sheet .cancel-btn { background: #EEF1F1; color: var(--text); }
+    .confirm-sheet .confirm-btn { background: var(--brand); color: #fff; }
+    .confirm-sheet .confirm-btn:disabled { background: #C9D0D1; }
+    .rp-required-hint { text-align: center; font-size: 11.5px; color: #B5140A; margin-top: 8px; font-weight: bold; }
+    .rp-required-hint.hidden { display: none; }
+    .confirm-sheet .delete-btn { background: #B5140A; color: #fff; }
+    .confirm-sheet .delete-btn:disabled { background: #E3A6A0; }
+    /* 사진 없이 바로 반납(취소)하는 지름길 버튼(2026-09-11 사장님 요청) - 주된
+       "반납 완료" 버튼보다는 눈에 덜 띄는 보조 동작으로 보이게 한다. */
+    .confirm-sheet .rp-skip-btn {
+      flex: none; width: 100%; background: none; color: var(--muted); text-decoration: underline;
+      font-size: 12.5px; font-weight: 600; padding: 6px; border-radius: 0; margin-top: 10px;
+    }
+    .stepper-field { margin-bottom: 14px; }
+    .stepper-field .field-label { font-size: 12.5px; color: var(--muted); margin-bottom: 6px; font-weight: bold; }
+    .date-stepper { display: flex; align-items: stretch; gap: 8px; }
+    .date-stepper input[type="date"] {
+      flex: 1; min-width: 0; text-align: center; font-size: 16px; height: 48px;
+      border-radius: 10px; border: 1.5px solid var(--border); font-family: inherit;
+    }
+    .date-stepper .step-btn {
+      flex: none; width: 48px; height: 48px; border-radius: 10px; background: #EEF1F1;
+      color: var(--text); font-size: 22px; font-weight: bold; border: none; cursor: pointer;
+      font-family: inherit; line-height: 1;
+      /* 손가락으로 빠르게 연달아 누르면 브라우저가 "두 번 눌러서 확대"로
+         착각해서 화면이 확대/축소되는 문제가 있었다(2026-09-09 사장님 요청 -
+         모바일에서 −/+ 누를 때 화면이 확대되는 증상). 이 버튼은 눌러서 값을
+         바꾸는 용도지 확대용이 아니라는 걸 브라우저에 알려줘서 막는다. */
+      touch-action: manipulation;
+    }
+    .date-stepper .step-btn:active { background: #DCE2E3; }
+
+    /* 반납 사진 2단계(장비/보관 위치) - 쏘카 어플의 차량 반납 사진 촬영 화면처럼
+       (2026-09-09 사장님 요청). "삭제하기" 확인 시트 안에서 내용만 바뀐다. */
+    .photo-input-hidden { position: absolute; width: 1px; height: 1px; padding: 0;
+      margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    .rp-pills { display: flex; gap: 8px; margin-bottom: 14px; }
+    .rp-pill {
+      flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+      padding: 8px 4px; border-radius: 9px; background: #EEF1F1; cursor: pointer;
+      border: 1.5px solid transparent;
+    }
+    .rp-pill.active { background: #E3F0F3; border-color: var(--brand); }
+    .rp-pill-icon {
+      width: 22px; height: 22px; border-radius: 50%; background: var(--surface);
+      color: var(--muted); font-size: 11px; font-weight: bold;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .rp-pill.done .rp-pill-icon { background: #127A5B; color: #fff; }
+    .rp-pill.active .rp-pill-icon { background: var(--brand); color: #fff; }
+    .rp-pill span:last-child { font-size: 10.5px; font-weight: bold; color: var(--muted); }
+    .rp-pill.active span:last-child, .rp-pill.done span:last-child { color: var(--text); }
+    .rp-body { background: var(--bg); border-radius: 10px; padding: 14px; margin-bottom: 4px; }
+    .rp-title { font-size: 13.5px; font-weight: bold; margin-bottom: 3px; }
+    .rp-hint { font-size: 11.5px; color: var(--muted); margin-bottom: 10px; line-height: 1.4; }
+    .rp-row { display: flex; align-items: center; gap: 12px; }
+    .rp-capture-btn {
+      padding: 11px 16px; border-radius: 9px; background: var(--brand); color: #fff;
+      font-size: 13.5px; font-weight: bold; display: inline-block;
+    }
+    .rp-capture-btn.done { background: #127A5B; }
+    .rp-thumb {
+      width: 56px; height: 56px; border-radius: 9px; object-fit: cover; display: none;
+      border: 1.5px solid var(--border);
+    }
+
+    /* 스캐너 이름을 누르면 뜨는 전체화면 달력(2026-09-09 사장님 요청 - 호텔
+       예약 사이트 날짜 선택 화면처럼). 다른 스캐너들의 타임라인은 이 동안
+       뒤로 가려진다. 다음 화면으로 넘어가는 느낌이 나도록 오른쪽에서 슬며시
+       밀려 들어오고 나갈 때도 부드럽게 빠져나간다(2026-09-09 사장님 요청). */
+    .month-picker-overlay {
+      position: fixed; inset: 0; background: var(--surface); z-index: 100;
+      display: flex; flex-direction: column;
+      transform: translateX(100%);
+      transition: transform .3s cubic-bezier(.2,.8,.2,1);
+    }
+    .month-picker-overlay.mp-in { transform: translateX(0); }
+    .mp-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 12px; border-bottom: 1px solid var(--border); flex: none;
+    }
+    .mp-close {
+      width: 34px; height: 34px; border-radius: 50%; background: none; border: none;
+      font-size: 22px; color: var(--text); cursor: pointer; line-height: 1;
+    }
+    .mp-close:active { background: #EEF1F1; }
+    .mp-title { font-size: 15px; font-weight: bold; }
+    .mp-summary {
+      padding: 12px 16px; font-size: 14px; font-weight: bold; color: var(--brand);
+      background: #E3F0F3; flex: none;
+    }
+    .mp-legend {
+      display: flex; gap: 14px; padding: 8px 16px 0; font-size: 11px; color: var(--muted); flex: none;
+    }
+    .mp-legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .mp-legend i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+    .mp-dow {
+      display: grid; grid-template-columns: repeat(7, 1fr); padding: 10px 16px 2px;
+      font-size: 12px; color: var(--muted); text-align: center; flex: none;
+    }
+    .mp-dow span.weekend { color: #B5140A; }
+    .mp-months { flex: 1; overflow-y: auto; padding: 0 16px 16px; -webkit-overflow-scrolling: touch; }
+    .mp-month-title { font-weight: bold; font-size: 14.5px; margin: 18px 0 8px; }
+    .mp-grid { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px; }
+    .mp-day {
+      aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+      font-size: 13.5px; color: var(--text); position: relative;
+    }
+    .mp-day.weekend { color: #B5140A; }
+    .mp-day.past { color: #C9D0D1; }
+    /* 이미 대여중/예약된 날짜도 회색 취소선 대신 색깔+이름으로 누가/어떤 상태인지
+       보이게 한다(2026-09-09 사장님 요청 - "기존 예약이 잡혀있거나 대여중인
+       항목도 나왔으면"). 눌러보면 자세한 정보를 알림으로 보여준다. */
+    .mp-day.mp-booked-held, .mp-day.mp-booked-reserved { cursor: pointer; }
+    .mp-day.mp-booked-held .mp-day-num { background: var(--held-bg); color: var(--held); }
+    .mp-day.mp-booked-reserved .mp-day-num { background: var(--reserved-bg); color: var(--reserved); }
+    .mp-day-num-name {
+      font-size: 8px; font-weight: normal; max-width: 90%; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; line-height: 1;
+    }
+    .mp-day.pickable { cursor: pointer; }
+    .mp-day.pickable:active { background: rgba(0,119,139,0.15); border-radius: 50%; }
+    .mp-day.in-range { background: rgba(0,119,139,0.14); }
+    .mp-day.range-start { background: rgba(0,119,139,0.14); border-radius: 50% 0 0 50%; }
+    .mp-day.range-end { background: rgba(0,119,139,0.14); border-radius: 0 50% 50% 0; }
+    .mp-day.range-start.range-end { border-radius: 50%; }
+    .mp-day .mp-day-num {
+      width: 100%; height: 100%; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; border-radius: 50%;
+    }
+    .mp-day.range-start .mp-day-num, .mp-day.range-end .mp-day-num {
+      background: var(--brand); color: #fff; font-weight: bold;
+    }
+    .mp-footer { display: flex; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--border); flex: none; }
+    .mp-reset {
+      flex: none; background: #EEF1F1; color: var(--text); border: none; border-radius: 10px;
+      padding: 0 18px; font-weight: bold; cursor: pointer; font-family: inherit; font-size: 14.5px;
+    }
+    .mp-confirm {
+      flex: 1; background: var(--brand); color: #fff; border: none; border-radius: 10px;
+      padding: 14px; font-weight: bold; font-size: 15.5px; cursor: pointer; font-family: inherit;
+    }
+    .mp-confirm:disabled { background: #C9D0D1; }
+    .bar {
+      position: relative; margin: 4px 2px; border-radius: 6px; font-size: 11px; font-weight: bold;
+      color: #fff; display: flex; align-items: center; padding: 0 8px; overflow: visible;
+      min-width: 0; z-index: 2; box-shadow: 0 1px 2px rgba(10,37,64,0.18);
+      /* 막대 몸통을 끌어서 이동할 때(attachMoveHandle) 터치기기에서 화면 자체가
+         옆으로 스크롤돼버려서 드래그가 안 먹는 문제가 있었다(2026-09-11 사장님
+         요청 - "기간 수정할때 달력도 같이 움직여서 안됨"). 손잡이(bar-handle)는
+         이미 touch-action:none으로 이 문제를 막아뒀는데, 막대 몸통 자체(이동용)엔
+         빠져있었다 - 여기도 똑같이 막아야 드래그 중에 달력이 안 움직인다. */
+      touch-action: none;
+    }
+    /* 막대 자체는 overflow:visible을 유지해야 양쪽 끝 드래그 손잡이(bar-handle,
+       막대 바깥으로 살짝 튀어나오게 배치됨)가 잘리지 않는다 - 그래서 말줄임은
+       안쪽 텍스트 span에서 따로 처리한다(2026-09-10 사장님 요청 - "막대 안에
+       예약자명이나 부서명이 말줄임으로 보이게"). */
+    .bar-label {
+      display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .bar.held { background: var(--held); }
+    .bar.reserved { background: var(--reserved); }
+    /* 막대 몸통을 끌어서 이동하는 동안(2026-09-11 사장님 요청) 지금 옮기고
+       있다는 걸 눈에 띄게 보여준다. */
+    .bar.bar-dragging { cursor: grabbing; opacity: 0.85; box-shadow: 0 3px 10px rgba(10,37,64,0.35); z-index: 4; }
+    .bar-handle {
+      position: absolute; top: -4px; bottom: -4px; width: 20px; z-index: 3;
+      cursor: ew-resize; touch-action: none;
+    }
+    .bar-handle.left { left: -8px; }
+    .bar-handle.right { right: -8px; }
+    .bar-handle::after {
+      content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 4px; height: 60%; background: rgba(255,255,255,0.9); border-radius: 2px;
+    }
+    .empty { padding: 30px; text-align: center; color: var(--muted); font-size: 13px; }
+    .bottom-links { display: flex; justify-content: center; gap: 18px; margin-top: 18px; }
+    .bottom-links a { font-size: 13px; color: var(--brand); text-decoration: none; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+<!-- 처음 접속했을 때 예약 목록을 구글시트에서 받아오는 동안(몇 초 걸릴 수 있음)
+     달력이 텅 비어 보이는 대신 로딩 화면을 보여준다(2026-09-10 사장님 요청 -
+     "처음에 사이트 접속할때도 달력이 바로 나오지않으면 로딩화면이 나오게").
+     대여화면(scanner_app.html)에 먼저 만든 것과 똑같은 방식. -->
+<div id="pageLoadingOverlay" class="page-loading-overlay">
+  <span class="page-loading-mark">DS</span>
+  <div class="page-loading-spinner"></div>
+  <div class="page-loading-text">불러오는 중...</div>
+</div>
+
+<header class="app-header">
+  <div class="brand">
+    <span class="brand-mark">DS</span>
+    <div class="brand-text">
+      <span class="brand-name">Dentsply Sirona</span>
+      <span class="brand-sub">Scanner Booking</span>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="month-nav">
+      <button id="prevBtn" class="nav-arrow" type="button" aria-label="이전달">‹</button>
+      <span class="month-label" id="monthTitle"></span>
+      <button id="nextBtn" class="nav-arrow" type="button" aria-label="다음달">›</button>
+      <button id="todayBtn" class="today-btn" type="button">오늘</button>
+    </div>
+    <div class="legend-chips">
+      <span class="chip chip-held"><i></i>대여중</span>
+      <span class="chip chip-reserved"><i></i>예약됨</span>
+      <span class="chip chip-today"><i></i>오늘</span>
+    </div>
+    <button class="guide-btn" id="guideBtn" type="button" aria-label="이용 가이드">?</button>
+  </div>
+</header>
+
+<div class="gantt-wrap">
+  <div class="gantt" id="gantt"><div class="empty">불러오는 중...</div></div>
+</div>
+
+<div class="bottom-links">
+  <a href="scanner_status.html">현황판</a>
+  <a href="scanner_app.html">대여/반납하러 가기</a>
+</div>
+
+<script src="./static/scanner-ui.js"></script>
+<script>
+  // 2026-09-16 추가 - 파이썬 사이트(Flask)가 대신 전달해주던 구글 Apps Script
+  // 주소로 화면이 직접 통신한다(깃허브 페이지 이전). CORS 오류 없이 통신하는
+  // 방법은 postJson_ 도우미 안 주석 참고.
+  var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzhUKOf5h55fg5-lGDKuS7N_6qGppE8okgRWj_BSgvjwTZzBE6ObN8zNJeqJokQZS7Z/exec';
+  var APPS_SCRIPT_TOKEN = 'e15f4d1e8766c80d0f2979713a49b7fe';
+
+  // Content-Type 헤더를 일부러 안 붙여야 브라우저가 "단순 요청"으로 보내서 사전
+  // 확인(preflight) 요청을 안 보내고, 구글 Apps Script와 CORS 오류 없이 통신할 수
+  // 있다(엑스스마트 프로 앱에서 이미 검증된 방식 - workflows/xsmart_error_app 참고).
+  function postJson_(action, body) {
+    var payload = body || {};
+    payload.action = action;
+    payload.token = APPS_SCRIPT_TOKEN;
+    return fetch(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) })
+        .then(function(r) { return r.json(); });
+  }
+
+  var MODEL_COLORS = { 'PS C': '#1E6FBF', 'PS 2': '#7A4FBF' };
+  var DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+  var MONTH_LABELS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+  var COL_W = 40, LABEL_W = 130, ROW_H = 46, HEAD_H = 50, DIVIDER_H = 24;
+  // 2주 단위 대신 달력 한 달 전체를 보여준다(2026-09-09 사장님 요청). 그 달의
+  // 실제 일수(28~31일)는 render()에서 매번 다시 계산한다.
+  var WINDOW_DAYS = 30;
+
+  function el(id) { return document.getElementById(id); }
+  function toISO(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function addDays(d, n) { var r = new Date(d); r.setDate(r.getDate() + n); return r; }
+  function parseISO(s) { var p = s.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); }
+  function dayIndex(dateStr, windowStart) {
+    return Math.round((parseISO(dateStr) - windowStart) / 86400000);
+  }
+  function daysInMonth(d) { return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); }
+
+  // 2026년 대한민국 공휴일(설날/추석 등 음력 명절 + 대체공휴일 포함, 2026-09-09
+  // 사장님 요청 - "주말하고 빨간날을 구분해주고"). 음력 명절은 해마다 날짜가
+  // 바뀌므로, 다음 해로 넘어가면 이 목록도 새로 채워줘야 한다(그 전까지는 그냥
+  // 평일처럼 보임 - 안전하게 아무 표시 안 함).
+  var KOREAN_HOLIDAYS = {
+    '2026-01-01': '신정',
+    '2026-02-16': '설날', '2026-02-17': '설날', '2026-02-18': '설날',
+    '2026-03-01': '삼일절', '2026-03-02': '삼일절 대체',
+    '2026-05-05': '어린이날',
+    '2026-05-24': '부처님오신날', '2026-05-25': '부처님오신날 대체',
+    '2026-06-06': '현충일',
+    '2026-08-15': '광복절', '2026-08-17': '광복절 대체',
+    '2026-09-24': '추석', '2026-09-25': '추석', '2026-09-26': '추석',
+    '2026-10-03': '개천절', '2026-10-05': '개천절 대체',
+    '2026-10-09': '한글날',
+    '2026-12-25': '크리스마스',
+  };
+  function holidayName(iso) { return KOREAN_HOLIDAYS[iso] || null; }
+
+  // "이전달/다음달"로 옮겨다니는 기준이 되는, 지금 보고 있는 달의 1일.
+  var viewMonth = new Date();
+  viewMonth.setDate(1);
+  viewMonth.setHours(0, 0, 0, 0);
+  // 실제 화면에 표시되는 첫 날짜 - 지금 이번 달을 보고 있으면 1일이 아니라
+  // 오늘부터 보여준다(2026-09-09 사장님 요청 - "이미 지난 날짜는 표시되지
+  // 않게"). render()에서 매번 다시 계산한다. 다른 달(이전달/다음달)을 볼
+  // 때는 지난 날짜 구분이 의미 없으니 그 달 전체를 그대로 보여준다.
+  var windowStart = new Date(viewMonth);
+
+  // 호텔 예약 사이트처럼 "시작일 클릭 → 종료일 클릭 → 확인" 2단계 선택을 위한 상태
+  // (2026-09-09 사장님 요청). lastData/lastByScanner는 확인창을 취소했을 때 다시
+  // 서버에서 불러오지 않고 같은 화면을 그대로 다시 그리기 위해 기억해둔다.
+  var pending = { scannerId: null, startIso: null };
+  var lastData = null;
+  var lastByScanner = {};
+  // PS C / PS 2 구분줄을 눌러서 그 그룹을 접었다 펼 수 있다(2026-09-10 사장님
+  // 요청 - "섹션 헤더(토글 아코디언 기능 포함)"). 달을 옮기거나 새로고침해도
+  // 접어둔 상태가 유지되도록 render() 밖(모듈 전역)에 기억해둔다.
+  var collapsedGroups = {};
+  // 스캐너별 "지난번 보관 위치 사진" - 대여 확인창(예, 대여할게요)에서 누르기
+  // 전에 미리 보여주기 위해 화면을 열 때 한 번만 받아서 기억해둔다(2026-09-09
+  // 사장님 요청 - "대여할게요를 누르기 전에 화면에 현재 위치가 나올 수 있게",
+  // "반응이 빠르게"). 누를 때마다 서버에 새로 물어보지 않아서 확인창이 바로 뜬다.
+  // 처음엔 예약 목록(reservations)과 따로 /scanner/api/config를 한 번 더 불러서
+  // 채웠었는데, 그러면 화면을 열자마자 빠르게 날짜를 눌렀을 때 그 응답이 아직 안
+  // 와서 사진이 안 보이는 문제가 있었다(2026-09-09 사장님 실사용 확인). 지금은
+  // 달력이 이미 받아오는 예약 목록 응답 안에 이 값도 같이 실려오도록 서버 쪽을
+  // 고쳐서(사장님 요청 - "미리... 사진을 찾고 있는건 어때? 더 빨리 찾아질거같은데"),
+  // 별도 요청/대기 없이 render()에서 한 번에 채워진다.
+  var lastLocationByScanner = {};
+
+  function rangeAllFree(scannerId, start, end) {
+    var list = lastByScanner[scannerId] || [];
+    var cursor = parseISO(start);
+    var endDate = parseISO(end);
+    while (cursor <= endDate) {
+      var iso = toISO(cursor);
+      for (var i = 0; i < list.length; i++) {
+        if (iso >= list[i].start_date && iso <= list[i].end_date) return false;
+      }
+      cursor = addDays(cursor, 1);
+    }
+    return true;
+  }
+
+  // .confirm-backdrop를 부드럽게 열고 닫는 공용 도우미(2026-09-09 사장님 요청).
+  // 열 때마다 dsOpenOverlay_(scanner-ui.js)에 같이 등록해서, 안드로이드 기기
+  // 자체 뒤로가기 버튼을 눌러도 페이지 전체가 아니라 이 시트만 닫히게 한다
+  // (2026-09-11 사장님 요청). 이 시트를 닫는 모든 버튼(취소/바깥클릭/저장·삭제
+  // 완료 등)은 closeSheetAnim_(backdrop)을 직접 부르지 말고 dsCloseOverlay_()를
+  // 대신 불러야 이 등록과 어긋나지 않는다.
+  function openSheetAnim_(backdrop) {
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { backdrop.classList.add('cb-in'); });
+    });
+    dsOpenOverlay_(function () { closeSheetAnim_(backdrop); });
+  }
+  function closeSheetAnim_(backdrop) {
+    backdrop.classList.remove('cb-in');
+    setTimeout(function () {
+      if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+    }, 240);
+  }
+
+  function handleCellClick(scannerId, dateIso, scannerLabel) {
+    // 같은 날짜를 두 번 클릭하면 시작일=반납예정일인 당일 예약으로 바로 넘어간다
+    // (2026-09-10 사장님 요청). 그 외엔 기존처럼 시작일 클릭 → 다른 날짜 클릭으로
+    // 기간을 잡는다.
+    if (pending.scannerId === scannerId && pending.startIso) {
+      var start = pending.startIso, end = dateIso;
+      if (end < start) { var t = start; start = end; end = t; }
+      if (!rangeAllFree(scannerId, start, end)) {
+        showAlert('그 사이에 이미 예약된 날짜가 있어요. 다른 날짜를 다시 선택해주세요.');
+        pending = { scannerId: scannerId, startIso: dateIso };
+        render(lastData);
+        return;
+      }
+      pending = { scannerId: null, startIso: null };
+      showConfirmSheet(scannerId, scannerLabel, start, end);
+      return;
+    }
+    // 처음 클릭했거나, 다른 스캐너를 새로 눌렀을 때는 시작일부터 다시 선택한다.
+    pending = { scannerId: scannerId, startIso: dateIso };
+    render(lastData);
+  }
+
+  function csLocationHtml_() {
+    // 2026-09-16 - "필요할 때만 불러오기"로 바뀌면서, 이 자리엔 사진 대신 우선
+    // 불러오는 중 표시만 넣어두고 showConfirmSheet에서 실제 사진으로 바꿔친다.
+    return '<div class="cs-location"><div class="cs-location-loading">사진 불러오는 중…</div>' +
+        '<span>📍 지난번 보관 위치</span></div>';
+  }
+
+  function showConfirmSheet(scannerId, scannerLabel, start, end) {
+    var days = Math.round((parseISO(end) - parseISO(start)) / 86400000) + 1;
+    // 지난번에 반납하면서 찍어둔 보관 위치 사진이 있으면, 대여를 확정하기 전에
+    // 미리 보여줘서 어디 가서 가져와야 하는지 알 수 있게 한다(2026-09-09 사장님
+    // 요청). 2026-09-16부터는 이 값이 사진 자체가 아니라 드라이브 파일ID라
+    // ("필요할 때만 불러오기") 실제로 이 확인창을 열 때만 action=photo로 가져온다.
+    var locationFileId = lastLocationByScanner[scannerId];
+    var backdrop = document.createElement('div');
+    backdrop.className = 'confirm-backdrop';
+    backdrop.innerHTML =
+      '<div class="confirm-sheet">' +
+        '<h3>' + scannerLabel + ' 대여</h3>' +
+        '<p>' + start + ' ~ ' + end + ' (총 ' + days + '일) 동안 대여하시겠어요?<br>확인하시면 시리얼 번호 사진 촬영으로 넘어갑니다.</p>' +
+        (locationFileId ? csLocationHtml_() : '') +
+        '<div class="btn-row">' +
+          '<button class="cancel-btn" type="button">취소</button>' +
+          '<button class="confirm-btn" type="button">예, 대여할게요</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(backdrop);
+    openSheetAnim_(backdrop);
+    // 작은 썸네일이라 잘 안 보일 수 있으니, 누르면 화면 가득 크게 보여준다
+    // (2026-09-09 사장님 요청 - "사진을 클릭하면 사진이 확대 되게").
+    if (locationFileId) {
+      window.dsFetchScannerPhoto_(APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, locationFileId).then(function(dataUrl) {
+        var slot = backdrop.querySelector('.cs-location-loading');
+        if (!slot) return; // 그 사이 확인창이 닫혔으면 아무 것도 안 함.
+        slot.outerHTML = '<img src="' + dataUrl + '" alt="보관 위치 사진">';
+        backdrop.querySelector('.cs-location img').onclick = function() {
+          showImageLightbox(dataUrl);
+        };
+      }).catch(function() {
+        var slot = backdrop.querySelector('.cs-location-loading');
+        if (slot) slot.textContent = '사진을 불러오지 못했어요.';
+      });
+    }
+    backdrop.querySelector('.cancel-btn').onclick = function() {
+      dsCloseOverlay_();
+    };
+    backdrop.addEventListener('click', function(e) {
+      if (e.target === backdrop) dsCloseOverlay_();
+    });
+    backdrop.querySelector('.confirm-btn').onclick = function() {
+      navigateWithFade('scanner_app.html?scanner_id=' + encodeURIComponent(scannerId) +
+          '&start_date=' + encodeURIComponent(start) + '&end_date=' + encodeURIComponent(end) +
+          '&focus=photo');
+    };
+  }
+
+  // 스캐너 이름을 누르면 뜨는 전체화면 달력 - 호텔 예약 사이트의 "날짜 및 인원
+  // 선택" 화면처럼, 이 스캐너만 크게 보면서 달 단위로 스크롤하며 시작일/종료일을
+  // 고른다(2026-09-09 사장님 요청). 지난 날짜와 이미 예약된 날짜는 흐리게 표시하고
+  // 선택할 수 없게 막는다.
+  function openMonthPicker(scannerId, scannerLabel) {
+    var todayIso = toISO(new Date());
+    var pickStart = null, pickEnd = null;
+
+    var overlay = document.createElement('div');
+    overlay.className = 'month-picker-overlay';
+    overlay.innerHTML =
+      '<div class="mp-header">' +
+        '<button class="mp-close" type="button">×</button>' +
+        '<div class="mp-title">' + scannerLabel + ' · 날짜 선택</div>' +
+        '<div style="width:34px;"></div>' +
+      '</div>' +
+      '<div class="mp-summary" id="mpSummary"></div>' +
+      '<div class="mp-legend">' +
+        '<span><i style="background:var(--held)"></i>대여중</span>' +
+        '<span><i style="background:var(--reserved)"></i>예약됨</span>' +
+      '</div>' +
+      '<div class="mp-dow">' + DAY_LABELS.map(function(d, i) {
+        return '<span' + (i === 0 || i === 6 ? ' class="weekend"' : '') + '>' + d + '</span>';
+      }).join('') + '</div>' +
+      '<div class="mp-months" id="mpMonths"></div>' +
+      '<div class="mp-footer">' +
+        '<button type="button" class="mp-reset" id="mpReset">초기화</button>' +
+        '<button type="button" class="mp-confirm" id="mpConfirm" disabled>선택 완료</button>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { overlay.classList.add('mp-in'); });
+    });
+    function closeOverlay() {
+      overlay.classList.remove('mp-in');
+      setTimeout(function () {
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      }, 260);
+    }
+    // 안드로이드 기기 자체 뒤로가기를 눌러도 이 전체화면 달력만 닫히게 한다
+    // (2026-09-11 사장님 요청).
+    dsOpenOverlay_(closeOverlay);
+
+    // 그 날짜에 걸린 예약(있으면)을 돌려준다 - 없으면 빈 날짜.
+    function reservationOn(iso) {
+      var list = lastByScanner[scannerId] || [];
+      for (var i = 0; i < list.length; i++) {
+        if (iso >= list[i].start_date && iso <= list[i].end_date) return list[i];
+      }
+      return null;
+    }
+
+    function renderMonths() {
+      var box = overlay.querySelector('#mpMonths');
+      box.innerHTML = '';
+      var cursor = new Date();
+      cursor.setDate(1);
+      cursor.setHours(0, 0, 0, 0);
+      for (var m = 0; m < 4; m++) {
+        var y = cursor.getFullYear(), mo = cursor.getMonth();
+        var monthDiv = document.createElement('div');
+        monthDiv.className = 'mp-month';
+        var title = document.createElement('div');
+        title.className = 'mp-month-title';
+        title.textContent = y + '년 ' + (mo + 1) + '월';
+        monthDiv.appendChild(title);
+
+        var grid = document.createElement('div');
+        grid.className = 'mp-grid';
+        var firstDow = new Date(y, mo, 1).getDay();
+        var daysInMonth = new Date(y, mo + 1, 0).getDate();
+        for (var i = 0; i < firstDow; i++) grid.appendChild(document.createElement('div'));
+        for (var day = 1; day <= daysInMonth; day++) {
+          var d = new Date(y, mo, day);
+          var iso = toISO(d);
+          var dow = d.getDay();
+          var isPast = iso < todayIso;
+          var resOn = isPast ? null : reservationOn(iso);
+          var free = !isPast && !resOn;
+          var bookedClass = resOn ? (resOn.status === '대여중' ? ' booked mp-booked-held' : ' booked mp-booked-reserved') : '';
+          var holiday = holidayName(iso);
+          var cell = document.createElement('div');
+          cell.className = 'mp-day' +
+              (dow === 0 || dow === 6 || holiday ? ' weekend' : '') +
+              (isPast ? ' past' : (free ? ' pickable' : bookedClass)) +
+              (pickStart && iso === pickStart ? ' range-start' : '') +
+              (pickEnd && iso === pickEnd ? ' range-end' : '') +
+              (pickStart && pickEnd && iso > pickStart && iso < pickEnd ? ' in-range' : '');
+          if (holiday) cell.title = holiday;
+          // 예약이 걸려있으면(대여중/예약됨) 이름도 작게 같이 보여준다(2026-09-09
+          // 사장님 요청 - "기존 예약이 잡혀있거나 대여중인 항목도 나왔으면"). 공휴일
+          // 이름도 마찬가지로 작게 보여준다(2026-09-09 - "장비 클릭해서 나오는
+          // 달력도 공휴일 표시해줘").
+          cell.innerHTML = '<span class="mp-day-num"><span>' + day + '</span>' +
+              (resOn ? '<span class="mp-day-num-name">' + resOn.employee_name + '</span>' :
+                  (holiday ? '<span class="mp-day-num-name">' + holiday + '</span>' : '')) +
+              '</span>';
+          if (free) {
+            cell.onclick = (function(dateIso) { return function() { onPickDay(dateIso); }; })(iso);
+          } else if (resOn) {
+            cell.onclick = (function(r) {
+              return function() {
+                var rTimeTag = (r.start_time && r.end_time) ? (' ' + r.start_time + '~' + r.end_time) : '';
+                showAlert(r.employee_name + '님' + rTimeTag + ' · ' + r.status + '\n' + r.start_date + ' ~ ' + r.end_date);
+              };
+            })(resOn);
+          }
+          grid.appendChild(cell);
+        }
+        monthDiv.appendChild(grid);
+        box.appendChild(monthDiv);
+        cursor.setMonth(cursor.getMonth() + 1);
+      }
+    }
+
+    function onPickDay(iso) {
+      if (!pickStart || pickEnd) {
+        pickStart = iso; pickEnd = null;
+      } else if (iso === pickStart) {
+        // 같은 날짜를 두 번 누르면 시작일=반납예정일인 당일 예약으로 바로 넘어간다
+        // (2026-09-10 사장님 요청 - 메인 달력과 동일하게 맞춤). 선택을 취소하고
+        // 싶으면 "초기화" 버튼을 쓰면 된다.
+        pickEnd = iso;
+      } else if (iso < pickStart) {
+        pickStart = iso;
+      } else if (!rangeAllFree(scannerId, pickStart, iso)) {
+        showAlert('그 사이에 이미 예약된 날짜가 있어요. 다른 날짜를 다시 선택해주세요.');
+        pickStart = iso; pickEnd = null;
+      } else {
+        pickEnd = iso;
+      }
+      updateSummary();
+      renderMonths();
+    }
+
+    function updateSummary() {
+      var summary = overlay.querySelector('#mpSummary');
+      var confirmBtn = overlay.querySelector('#mpConfirm');
+      if (pickStart && pickEnd) {
+        var days = Math.round((parseISO(pickEnd) - parseISO(pickStart)) / 86400000) + 1;
+        summary.textContent = pickStart + ' ~ ' + pickEnd + ' (총 ' + days + '일)';
+        confirmBtn.disabled = false;
+      } else if (pickStart) {
+        summary.textContent = pickStart + ' 시작 · 반납예정일을 선택해주세요';
+        confirmBtn.disabled = true;
+      } else {
+        summary.textContent = '시작일을 선택해주세요';
+        confirmBtn.disabled = true;
+      }
+    }
+
+    overlay.querySelector('.mp-close').onclick = dsCloseOverlay_;
+    overlay.querySelector('#mpReset').onclick = function() {
+      pickStart = null; pickEnd = null; updateSummary(); renderMonths();
+    };
+    overlay.querySelector('#mpConfirm').onclick = function() {
+      dsCloseOverlay_();
+      showConfirmSheet(scannerId, scannerLabel, pickStart, pickEnd);
+    };
+
+    updateSummary();
+    renderMonths();
+  }
+
+  // 예약 막대를 누르면 바로 "삭제(반납/취소)할지"부터 물어본다(2026-09-09
+  // 사장님 요청). 확인 절차 없이 달력에서 바로 삭제되도록 골랐으므로, 여기서
+  // 곧장 반납 처리를 호출한다. 기간만 바꾸고 싶을 때를 위해 저장/취소와 함께
+  // 시작일/반납예정일 칸도 같이 보여준다.
+  function showDeleteConfirmSheet(scannerId, scannerLabel, res, barEl) {
+    var backdrop = document.createElement('div');
+    backdrop.className = 'confirm-backdrop';
+    // 2026-09-09 사장님 요청 - 이제 시작일도(이미 대여중이어도) 바꿀 수 있고,
+    // 손가락으로 누르기 쉽게 −/+ 버튼으로 하루씩 조절하는 방식을 더했다(작은
+    // 달력 아이콘을 정확히 누르기 어렵다는 피드백).
+    backdrop.innerHTML =
+      '<div class="confirm-sheet">' +
+        '<h3>' + scannerLabel + ' 예약</h3>' +
+        '<p>' + res.employee_name + '님' + ((res.start_time && res.end_time) ? (' ' + res.start_time + '~' + res.end_time) : '') +
+          ' · ' + res.start_date + ' ~ ' + res.end_date + ' (' + res.status + ')</p>' +
+        '<div class="stepper-field">' +
+          '<div class="field-label">시작일</div>' +
+          '<div class="date-stepper">' +
+            '<button type="button" class="step-btn" data-target="inlineEditStart" data-delta="-1">−</button>' +
+            '<input type="date" id="inlineEditStart" value="' + res.start_date + '">' +
+            '<button type="button" class="step-btn" data-target="inlineEditStart" data-delta="1">+</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="stepper-field">' +
+          '<div class="field-label">반납예정일</div>' +
+          '<div class="date-stepper">' +
+            '<button type="button" class="step-btn" data-target="inlineEditEnd" data-delta="-1">−</button>' +
+            '<input type="date" id="inlineEditEnd" value="' + res.end_date + '">' +
+            '<button type="button" class="step-btn" data-target="inlineEditEnd" data-delta="1">+</button>' +
+          '</div>' +
+        '</div>' +
+        '<button class="confirm-btn" id="inlineEditSaveBtn" type="button" style="width:100%; margin-top:14px;">기간 저장</button>' +
+        '<div class="btn-row" style="margin-top:16px;">' +
+          '<button class="cancel-btn" type="button">취소</button>' +
+          '<button class="delete-btn" type="button">' + (res.status === '대여중' ? '반납하기' : '삭제하기') + '</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(backdrop);
+    openSheetAnim_(backdrop);
+    function closeSheet() { dsCloseOverlay_(); }
+    backdrop.querySelector('.cancel-btn').onclick = closeSheet;
+    backdrop.addEventListener('click', function(e) {
+      if (e.target === backdrop) closeSheet();
+    });
+    Array.prototype.forEach.call(backdrop.querySelectorAll('.step-btn'), function(btn) {
+      btn.onclick = function() {
+        var inp = backdrop.querySelector('#' + btn.getAttribute('data-target'));
+        var delta = +btn.getAttribute('data-delta');
+        inp.value = toISO(addDays(parseISO(inp.value), delta));
+      };
+    });
+
+    // 기간 저장 - 달력을 떠나지 않고 그 자리에서 바로 수정한다(2026-09-09
+    // 사장님 요청 - "클릭하면 삭제 말고 날짜 수정도 바로 할 수 있게").
+    // 기간이 다른 예약과 겹치면(2026-09-10 사장님 요청 - 동시에 같은 장비를 여러
+    // 사람이 건드릴 때 사고 방지) 서버가 'conflict'로 알려준다 - 우회 없이 그냥
+    // 막고 안내만 한다("겹치면 그래도 진행하시겠습니까를 물어보면 안되지").
+    function saveEdit() {
+      var newStart = backdrop.querySelector('#inlineEditStart').value;
+      var newEnd = backdrop.querySelector('#inlineEditEnd').value;
+      if (!newStart || !newEnd || newEnd < newStart) {
+        showAlert('날짜를 다시 확인해주세요(반납예정일이 시작일보다 빠를 수 없어요).');
+        return;
+      }
+      var btn = backdrop.querySelector('#inlineEditSaveBtn');
+      btn.disabled = true;
+      btn.textContent = '저장 중...';
+      postJson_('edit_reservation', {
+          reservation_id: res.reservation_id,
+          start_date: newStart,
+          end_date: newEnd,
+          employee_name: res.employee_name,
+        }).then(function(data) {
+        if (data.status === 'ok') {
+          closeSheet();
+          res.start_date = newStart;
+          res.end_date = newEnd;
+          if (barEl) {
+            var s2 = Math.max(dayIndex(newStart, windowStart), 0);
+            var e2 = Math.min(dayIndex(newEnd, windowStart), WINDOW_DAYS - 1);
+            barEl.style.gridColumn = (s2 + 2) + ' / ' + (e2 + 3);
+          }
+          load();
+        } else if (data.status === 'conflict') {
+          btn.disabled = false;
+          btn.textContent = '기간 저장';
+          showAlert('이미 ' + data.current_holder + '님이 ' + (data.conflict_status === '대여중' ? '대여중' : '예약') +
+              '인 기간과 겹쳐서 지금은 이 기간으로 수정할 수 없습니다(' + data.conflict_start + '~' + data.conflict_end +
+              (data.conflict_start_time && data.conflict_end_time ? (' ' + data.conflict_start_time + '~' + data.conflict_end_time) : '') + ').',
+              { tone: 'warn' });
+        } else {
+          btn.disabled = false;
+          btn.textContent = '기간 저장';
+          showAlert('수정하지 못했습니다: ' + (data.error || '알 수 없는 오류'));
+        }
+      }).catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = '기간 저장';
+        showAlert('연결에 실패했습니다: ' + err);
+      });
+    }
+    backdrop.querySelector('#inlineEditSaveBtn').onclick = saveEdit;
+
+    backdrop.querySelector('.delete-btn').onclick = function() {
+      // 실제로 가져간(대여중) 장비는 "반납하기"를 누르면 바로 지우지 않고,
+      // 쏘카 어플처럼 반납 사진(장비/보관 위치)부터 찍게 한다(2026-09-09
+      // 사장님 요청). 아직 안 가져간 예약(예약됨) 취소는 예전처럼 확인 없이
+      // 바로 처리한다.
+      if (res.status === '대여중') {
+        showReturnPhotoStep(scannerId, scannerLabel, res, barEl, backdrop);
+        return;
+      }
+      var btn = backdrop.querySelector('.delete-btn');
+      btn.disabled = true;
+      btn.textContent = '삭제 중...';
+      postJson_('return', {
+          reservation_id: res.reservation_id,
+          scanner_id: scannerId,
+          employee_name: res.employee_name,
+        }).then(function(data) {
+        if (data.status === 'ok') {
+          closeSheet();
+          // 화면은 바로 지우고(2026-09-09 사장님 요청 - 클릭 이후 처리 속도),
+          // 다른 사람의 변경사항까지 반영한 정확한 최신 상태는 뒤에서 이어서
+          // 불러온다(달력 전체를 다시 그리는 동안 잠깐 안 보여도 되는 배경 작업).
+          if (barEl && barEl.parentNode) barEl.parentNode.removeChild(barEl);
+          load();
+        } else {
+          btn.disabled = false;
+          btn.textContent = '삭제하기';
+          showAlert('삭제하지 못했습니다: ' + (data.error || '알 수 없는 오류'));
+        }
+      }).catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = '삭제하기';
+        showAlert('연결에 실패했습니다: ' + err);
+      });
+    };
+  }
+
+  // 반납 사진 2단계 - 쏘카 어플에서 차량 반납할 때 사진 찍는 것처럼, 장비 사진과
+  // 보관 위치 사진을 안내하며 찍게 한다(2026-09-09 사장님 요청 - "사무실 어디에
+  // 있는지 알 수 있으니까"). 기존 확인 시트(backdrop) 안의 내용만 바꿔서 보여준다.
+  function showReturnPhotoStep(scannerId, scannerLabel, res, barEl, backdrop) {
+    var STEPS = [
+      { key: 'equip', label: '장비', title: '① 장비 사진', hint: '반납하는 장비 전체가 잘 보이도록 찍어주세요.' },
+      { key: 'location', label: '위치', title: '② 보관 위치 사진', hint: '어디에 뒀는지 알아볼 수 있게 찍어주세요(쇼룸 진열대, 캐비닛 등).' },
+    ];
+    var photos = { equip: null, location: null };
+    var stepIndex = 0;
+    var sheet = backdrop.querySelector('.confirm-sheet');
+    sheet.innerHTML =
+      '<h3>' + scannerLabel + ' 반납</h3>' +
+      '<div class="rp-pills" id="rpPills"></div>' +
+      '<div class="rp-body" id="rpBody"></div>' +
+      '<input type="file" id="rpPhotoInput" accept="image/*" capture="environment" class="photo-input-hidden">' +
+      '<button class="confirm-btn" id="rpDoneBtn" type="button" style="width:100%; margin-top:14px;" disabled>반납 완료</button>' +
+      '<div class="rp-required-hint" id="rpRequiredHint">사진 2장을 모두 찍어야 반납할 수 있어요.</div>' +
+      // 사진 찍을 상황이 아니거나 그냥 빨리 취소만 하고 싶을 때를 위한 지름길
+      // (2026-09-11 사장님 요청 - "진행중인 대여/예약을 더 쉽게 취소하고 싶음").
+      // 대여화면의 "사진 없이 진행하기"와 같은 패턴 - 사진 없이도 반납 자체는
+      // 항상 가능했으니(서버 쪽 필수 아님), 화면에서만 막던 걸 우회할 길을 열어준다.
+      '<button class="rp-skip-btn" id="rpSkipBtn" type="button">사진 없이 바로 반납(취소)하기</button>' +
+      '<button class="cancel-btn" id="rpBackBtn" type="button" style="width:100%; margin-top:10px;">취소</button>';
+
+    // 2026-09-09 사장님 요청 - "반납 사진은 선택사항이 아니라 필수로": 두 장
+    // 다 찍기 전에는 "반납 완료" 버튼을 못 누르게 막는다.
+    function bothPhotosReady() { return !!photos.equip && !!photos.location; }
+
+    function renderStep() {
+      var pills = sheet.querySelector('#rpPills');
+      pills.innerHTML = STEPS.map(function(s, i) {
+        var done = !!photos[s.key];
+        var active = i === stepIndex;
+        return '<div class="rp-pill' + (done ? ' done' : '') + (active ? ' active' : '') + '" data-i="' + i + '">' +
+          '<span class="rp-pill-icon">' + (done ? '✓' : (i + 1)) + '</span>' +
+          '<span>' + s.label + '</span></div>';
+      }).join('');
+      Array.prototype.forEach.call(pills.querySelectorAll('.rp-pill'), function(p) {
+        p.onclick = function() { stepIndex = +p.getAttribute('data-i'); renderStep(); };
+      });
+
+      var step = STEPS[stepIndex];
+      var photo = photos[step.key];
+      var body = sheet.querySelector('#rpBody');
+      body.innerHTML =
+        '<div class="rp-title">' + step.title + '</div>' +
+        '<div class="rp-hint">' + step.hint + '</div>' +
+        '<div class="rp-row">' +
+          '<label class="rp-capture-btn' + (photo ? ' done' : '') + '" for="rpPhotoInput">' +
+            (photo ? '✅ 다시 찍기' : '📷 촬영하기') + '</label>' +
+          '<img class="rp-thumb"' + (photo ? (' src="' + photo + '" style="display:inline-block"') : '') + '>' +
+        '</div>';
+
+      var ready = bothPhotosReady();
+      sheet.querySelector('#rpDoneBtn').disabled = !ready;
+      sheet.querySelector('#rpRequiredHint').classList.toggle('hidden', ready);
+    }
+
+    sheet.querySelector('#rpPhotoInput').addEventListener('change', function(e) {
+      var file = e.target.files[0];
+      if (!file) return;
+      // 올리기 전에 적당한 크기로 줄인다(2026-09-11 - scanner-ui.js 참고, 원본
+      // 그대로 올리면 반납 처리가 느려지거나 실패로 보이는 문제가 있었음).
+      resizeImageForUpload_(file, function(dataUrl) {
+        photos[STEPS[stepIndex].key] = dataUrl;
+        sheet.querySelector('#rpPhotoInput').value = '';
+        // 한 장 찍으면 바로 다음 단계로 넘어간다(2026-09-09, 촬영 단계 안내).
+        if (stepIndex < STEPS.length - 1) stepIndex++;
+        renderStep();
+      });
+    });
+
+    // rpDoneBtn(사진 다 찍고 반납)과 rpSkipBtn(사진 없이 바로 반납/취소) 둘 다
+    // 같은 반납 요청을 보내므로 공통 함수로 뺀다 - photoEquip/photoLocation을
+    // 빈 값으로 부르면 사진 없이 반납된다(서버 쪽은 원래도 사진을 필수로 요구한
+    // 적이 없음, 화면에서만 막고 있었음).
+    function doReturnRequest_(btn, busyText, doneText, photoEquip, photoLocation) {
+      btn.disabled = true;
+      var origText = btn.textContent;
+      btn.textContent = busyText;
+      postJson_('return', {
+          reservation_id: res.reservation_id,
+          scanner_id: scannerId,
+          employee_name: res.employee_name,
+          photo_return_base64: photoEquip || '',
+          photo_location_base64: photoLocation || '',
+        }).then(function(data) {
+        if (data.status === 'ok') {
+          dsCloseOverlay_();
+          if (barEl && barEl.parentNode) barEl.parentNode.removeChild(barEl);
+          showSuccessToast(doneText);
+          load();
+        } else {
+          btn.disabled = false;
+          btn.textContent = origText;
+          showAlert('반납 처리하지 못했습니다: ' + (data.error || '알 수 없는 오류'));
+        }
+      }).catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = origText;
+        showAlert('연결에 실패했습니다: ' + err);
+      });
+    }
+
+    sheet.querySelector('#rpBackBtn').onclick = function() { dsCloseOverlay_(); };
+    sheet.querySelector('#rpDoneBtn').onclick = function() {
+      // 사진 업로드 때문에 시간이 좀 걸릴 수 있다고 미리 안내한다(2026-09-11 실제
+      // 확인 - 사진 있으면 최대 30초 정도 걸릴 수 있음, 안내 없으면 멈춘 것처럼 보임).
+      doReturnRequest_(sheet.querySelector('#rpDoneBtn'), '반납 처리 중... (사진 업로드로 최대 30초 정도 걸릴 수 있어요)', '반납이 완료되었습니다', photos.equip, photos.location);
+    };
+    sheet.querySelector('#rpSkipBtn').onclick = function() {
+      doReturnRequest_(sheet.querySelector('#rpSkipBtn'), '처리 중...', '반납(취소) 처리되었습니다', '', '');
+    };
+
+    renderStep();
+  }
+
+  // 막대의 왼쪽(시작일)/오른쪽(반납예정일) 손잡이를 드래그해서 기간을 조절한다
+  // (2026-09-09 사장님 요청). 하루 단위로 딱딱 붙는(snap) 방식이라 손가락으로도
+  // 정확히 원하는 날짜에 맞추기 쉽다. 겹치는 예약 검사는 서버가 하지 않으므로
+  // (중복 대여 허용 정책) 클라이언트에서도 따로 막지 않는다.
+  function attachResizeHandle(handleEl, barEl, scannerId, res, edge, todayStr) {
+    handleEl.addEventListener('pointerdown', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleEl.setPointerCapture(e.pointerId);
+      var startX = e.clientX;
+      var curStart = res.start_date, curEnd = res.end_date;
+      var moved = false;
+      var origLabel = barEl.textContent;
+
+      function updateBarVisual() {
+        var s2 = Math.max(dayIndex(curStart, windowStart), 0);
+        var e2 = Math.min(dayIndex(curEnd, windowStart), WINDOW_DAYS - 1);
+        barEl.style.gridColumn = (s2 + 2) + ' / ' + (e2 + 3);
+        barEl.textContent = curStart + ' ~ ' + curEnd;
+      }
+
+      function onMove(ev) {
+        var deltaDays = Math.round((ev.clientX - startX) / COL_W);
+        if (deltaDays === 0 && !moved) return;
+        if (edge === 'start') {
+          var newStart = toISO(addDays(parseISO(res.start_date), deltaDays));
+          if (newStart < todayStr) newStart = todayStr;
+          if (newStart > res.end_date) newStart = res.end_date;
+          curStart = newStart;
+        } else {
+          var newEnd = toISO(addDays(parseISO(res.end_date), deltaDays));
+          if (newEnd < curStart) newEnd = curStart;
+          curEnd = newEnd;
+        }
+        moved = true;
+        updateBarVisual();
+      }
+
+      // 다른 예약과 겹치는 쪽으로 끌어다 놓으면(2026-09-10 사장님 요청) 서버가
+      // 'conflict'로 알려준다 - 우회 없이 그냥 막고 원래대로 되돌린 뒤 안내만 한다.
+      function saveResize() {
+        barEl.dataset.justDragged = '1';
+        barEl.textContent = '저장 중...';
+        postJson_('edit_reservation', {
+            reservation_id: res.reservation_id,
+            start_date: curStart,
+            end_date: curEnd,
+            employee_name: res.employee_name,
+          }).then(function(data) {
+          if (data.status === 'ok') {
+            res.start_date = curStart;
+            res.end_date = curEnd;
+            barEl.textContent = origLabel;
+            load(); // 다른 사람 변경사항까지 포함한 정확한 상태로 뒤에서 맞춘다.
+          } else if (data.status === 'conflict') {
+            barEl.textContent = origLabel;
+            updateBarVisualToOriginal();
+            showAlert('이미 ' + data.current_holder + '님이 ' + (data.conflict_status === '대여중' ? '대여중' : '예약') +
+                '인 기간과 겹쳐서 지금은 이 기간으로 바꿀 수 없습니다(' + data.conflict_start + '~' + data.conflict_end +
+                (data.conflict_start_time && data.conflict_end_time ? (' ' + data.conflict_start_time + '~' + data.conflict_end_time) : '') + ').',
+                { tone: 'warn' });
+          } else {
+            barEl.textContent = origLabel;
+            updateBarVisualToOriginal();
+            showAlert('기간을 바꾸지 못했습니다: ' + (data.error || '알 수 없는 오류'));
+          }
+        }).catch(function(err) {
+          barEl.textContent = origLabel;
+          updateBarVisualToOriginal();
+          showAlert('연결에 실패했습니다: ' + err);
+        });
+      }
+
+      function onUp() {
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        if (!moved || (curStart === res.start_date && curEnd === res.end_date)) {
+          barEl.textContent = origLabel; // 실제로 안 바뀌었으면 원래대로.
+          return;
+        }
+        saveResize();
+      }
+
+      function updateBarVisualToOriginal() {
+        var s2 = Math.max(dayIndex(res.start_date, windowStart), 0);
+        var e2 = Math.min(dayIndex(res.end_date, windowStart), WINDOW_DAYS - 1);
+        barEl.style.gridColumn = (s2 + 2) + ' / ' + (e2 + 3);
+      }
+
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+    });
+  }
+
+  // 막대 가운데(몸통)를 끌어서 예약 전체를 다른 날짜로 옮긴다 - 시작일/반납예정일이
+  // 같이 움직이므로 기간(며칠짜리인지)은 그대로 유지된다(2026-09-11 사장님 요청).
+  // 양쪽 끝 손잡이(attachResizeHandle)는 한쪽만 늘리고 줄이는 용도라 이것과는
+  // 다르다. 실제로 옆으로 끌지 않고 그냥 눌렀다 떼기만 하면(클릭) 이동 저장을
+  // 하지 않고 그대로 두어서, 막대를 누르면 삭제 확인창이 뜨는 기존 동작(bar.onclick,
+  // justDragged 플래그로 구분)이 안 깨지게 한다.
+  function attachMoveHandle(barEl, scannerId, res, todayStr) {
+    barEl.addEventListener('pointerdown', function(e) {
+      var startX = e.clientX;
+      var origStart = res.start_date, origEnd = res.end_date;
+      var spanDays = Math.round((parseISO(origEnd) - parseISO(origStart)) / 86400000);
+      var curStart = origStart, curEnd = origEnd;
+      var moved = false;
+      var origLabel = barEl.textContent;
+      barEl.setPointerCapture(e.pointerId);
+
+      function updateBarVisual() {
+        var s2 = Math.max(dayIndex(curStart, windowStart), 0);
+        var e2 = Math.min(dayIndex(curEnd, windowStart), WINDOW_DAYS - 1);
+        barEl.style.gridColumn = (s2 + 2) + ' / ' + (e2 + 3);
+        barEl.textContent = curStart + ' ~ ' + curEnd;
+      }
+      function updateBarVisualToOriginal() {
+        var s2 = Math.max(dayIndex(origStart, windowStart), 0);
+        var e2 = Math.min(dayIndex(origEnd, windowStart), WINDOW_DAYS - 1);
+        barEl.style.gridColumn = (s2 + 2) + ' / ' + (e2 + 3);
+        barEl.textContent = origLabel;
+      }
+
+      function onMove(ev) {
+        var deltaDays = Math.round((ev.clientX - startX) / COL_W);
+        if (deltaDays === 0 && !moved) return;
+        if (!moved) {
+          moved = true;
+          barEl.classList.add('bar-dragging');
+        }
+        ev.preventDefault(); // 드래그 중엔 화면 스크롤/선택 등 기본 동작을 막는다.
+        var newStart = toISO(addDays(parseISO(origStart), deltaDays));
+        if (newStart < todayStr) newStart = todayStr; // 오늘보다 이전으로는 못 옮긴다.
+        curStart = newStart;
+        curEnd = toISO(addDays(parseISO(curStart), spanDays)); // 기간 길이는 그대로.
+        updateBarVisual();
+      }
+
+      // 다른 예약과 겹치는 자리로 옮기면(2026-09-10 사장님 요청 - 겹침은 무조건
+      // 막음) 서버가 'conflict'로 알려준다 - 우회 없이 그냥 막고 원래 자리로
+      // 되돌린 뒤 안내만 한다.
+      function saveMove() {
+        barEl.dataset.justDragged = '1';
+        barEl.textContent = '저장 중...';
+        postJson_('edit_reservation', {
+            reservation_id: res.reservation_id,
+            start_date: curStart,
+            end_date: curEnd,
+            employee_name: res.employee_name,
+          }).then(function(data) {
+          barEl.classList.remove('bar-dragging');
+          if (data.status === 'ok') {
+            res.start_date = curStart;
+            res.end_date = curEnd;
+            barEl.textContent = origLabel;
+            load(); // 다른 사람 변경사항까지 포함한 정확한 상태로 뒤에서 맞춘다.
+          } else if (data.status === 'conflict') {
+            updateBarVisualToOriginal();
+            showAlert('이미 ' + data.current_holder + '님이 ' + (data.conflict_status === '대여중' ? '대여중' : '예약') +
+                '인 기간과 겹쳐서 지금은 이 자리로 옮길 수 없습니다(' + data.conflict_start + '~' + data.conflict_end +
+                (data.conflict_start_time && data.conflict_end_time ? (' ' + data.conflict_start_time + '~' + data.conflict_end_time) : '') + ').',
+                { tone: 'warn' });
+          } else {
+            updateBarVisualToOriginal();
+            showAlert('이동하지 못했습니다: ' + (data.error || '알 수 없는 오류'));
+          }
+        }).catch(function(err) {
+          barEl.classList.remove('bar-dragging');
+          updateBarVisualToOriginal();
+          showAlert('연결에 실패했습니다: ' + err);
+        });
+      }
+
+      function onUp() {
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        if (!moved || (curStart === origStart && curEnd === origEnd)) {
+          if (moved) { barEl.classList.remove('bar-dragging'); updateBarVisualToOriginal(); }
+          return; // 실제로 안 옮겨졌으면(클릭이었거나 제자리) 그대로 둔다.
+        }
+        saveMove();
+      }
+
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+    });
+  }
+
+  // 예약 데이터는 기간 제한 없이 한 번에 다 받아서 lastData에 쌓아두기 때문에
+  // (아래 load() 참고), 달을 옮길 때마다 서버에 다시 물어볼 필요 없이 이미 갖고
+  // 있는 데이터로 바로 다시 그리기만 하면 된다 - "이전달/다음달 클릭시 바로바로
+  // 반응"(2026-09-09 사장님 요청)이 이렇게 가능해진다.
+  function shiftMonth(direction) {
+    viewMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + direction, 1);
+    if (lastData) render(lastData); else load();
+  }
+  el('prevBtn').onclick = function() { shiftMonth(-1); };
+  el('nextBtn').onclick = function() { shiftMonth(1); };
+  el('todayBtn').onclick = function() {
+    var now = new Date();
+    viewMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    if (lastData) render(lastData); else load();
+  };
+  // 2026-09-10 사장님 요청 - 긴 안내 문구를 지우고 "?" 아이콘 하나로 숨겨둔다.
+  el('guideBtn').onclick = function() {
+    showAlert('👆 스캐너 이름(예: 쇼룸 1번)을 누르면 큰 달력으로 더 편하게 예약할 수 있어요.\n\n' +
+        '빈 칸(색이 없는 날짜)에서 시작일을 누르고, 이어서 종료일을 누르면 그 기간으로 바로 예약할 수도 있어요.\n\n' +
+        '색이 칠해진 막대(이미 있는 예약)를 누르면 삭제할지 물어봐요.\n\n' +
+        'PS C / PS 2 구분줄을 누르면 그 그룹을 접었다 펼 수 있어요.');
+  };
+
+  function render(data) {
+    lastData = data;
+    // 지금 실제로 보고 있는 달이 "이번 달"이면 오늘부터 보여주고(지난 날짜는
+    // 아예 빼버림), 다른 달(이전달/다음달로 옮겨간 경우)이면 그 달 전체를
+    // 처음부터 보여준다 - 과거를 일부러 보러 간 거니까 그건 안 자른다
+    // (2026-09-09 사장님 요청 - "이미 지난 날짜는 표시되지 않게").
+    var todayFull = new Date(); todayFull.setHours(0, 0, 0, 0);
+    var isCurrentMonth = viewMonth.getFullYear() === todayFull.getFullYear() &&
+        viewMonth.getMonth() === todayFull.getMonth();
+    windowStart = isCurrentMonth ? todayFull : viewMonth;
+    var monthEndDate = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0);
+    WINDOW_DAYS = Math.round((monthEndDate - windowStart) / 86400000) + 1;
+    el('monthTitle').textContent = viewMonth.getFullYear() + '년 ' + MONTH_LABELS[viewMonth.getMonth()];
+    var scanners = (data.scanners || []).slice();
+    // 대여 확인창에서 미리 보여줄 "지난번 보관 위치 사진" - 예약 목록과 같은 응답
+    // 안에 이미 같이 실려온다(2026-09-09 사장님 요청 - 별도로 안 기다리게).
+    lastLocationByScanner = {};
+    scanners.forEach(function(s) {
+      if (s.last_location_file_id) lastLocationByScanner[s.scanner_id] = s.last_location_file_id;
+    });
+    // PS C 그룹을 먼저, PS 2 그룹을 그다음에 보여준다(2026-09-09 사장님 요청).
+    var modelOrder = { 'PS C': 0, 'PS 2': 1 };
+    scanners.sort(function(a, b) {
+      var oa = modelOrder[a.model] !== undefined ? modelOrder[a.model] : 2;
+      var ob = modelOrder[b.model] !== undefined ? modelOrder[b.model] : 2;
+      return oa - ob;
+    });
+    // 모델이 바뀌는 지점마다 구분 행(divider)을 끼워 넣은 행 목록을 만든다.
+    // 접어둔 그룹(collapsedGroups)의 스캐너 행은 목록에서 아예 빼서, 그 그룹의
+    // 구분줄만 남고 아래 장비 행들은 안 보이게 한다(2026-09-10 사장님 요청).
+    var rows = [];
+    var lastModel = null;
+    scanners.forEach(function(s) {
+      if (s.model !== lastModel) {
+        rows.push({ type: 'divider', model: s.model });
+        lastModel = s.model;
+      }
+      if (!collapsedGroups[s.model]) {
+        rows.push({ type: 'scanner', data: s });
+      }
+    });
+
+    var reservations = data.reservations || [];
+    var todayStr = toISO(new Date());
+
+    var byScanner = {};
+    reservations.forEach(function(r) {
+      (byScanner[r.scanner_id] = byScanner[r.scanner_id] || []).push(r);
+    });
+    lastByScanner = byScanner;
+
+    // 같은 스캐너·같은 날짜에 시간 단위 예약이 여러 개 있으면(시간대가 겹치지
+    // 않으니 규칙상 둘 다 허용됨) 막대가 한 칸에 포개져 보이지 않도록 위아래로
+    // 나눠 쌓는다(2026-09-10 사장님 요청 - 시간 단위 예약 기능 표시 보완).
+    // 날짜만으로 겹치는 예약은 서버에서 이미 막기 때문에, 한 날짜에 여러 막대가
+    // 같이 있을 수 있는 경우는 "같은 스캐너 + 같은 하루 + 서로 다른 시간대"뿐이다.
+    var LANE_H = 24, LANE_PAD = 8;
+    rows.forEach(function(r) {
+      if (r.type !== 'scanner') return;
+      var list = byScanner[r.data.scanner_id] || [];
+      var byDate = {};
+      list.forEach(function(res) {
+        (byDate[res.start_date] = byDate[res.start_date] || []).push(res);
+      });
+      var laneMap = {};
+      var maxLanes = 1;
+      Object.keys(byDate).forEach(function(dateKey) {
+        var group = byDate[dateKey];
+        if (group.length > 1) {
+          group.sort(function(a, b) { return (a.start_time || '').localeCompare(b.start_time || ''); });
+        }
+        group.forEach(function(res, i) { laneMap[res.reservation_id] = i; });
+        if (group.length > maxLanes) maxLanes = group.length;
+      });
+      r.laneMap = laneMap;
+      r.maxLanes = maxLanes;
+      r.rowH = maxLanes > 1 ? Math.max(ROW_H, LANE_PAD + maxLanes * LANE_H) : ROW_H;
+    });
+
+    var gantt = el('gantt');
+    gantt.innerHTML = '';
+    gantt.style.gridTemplateColumns = LABEL_W + 'px repeat(' + WINDOW_DAYS + ', ' + COL_W + 'px)';
+    gantt.style.gridTemplateRows = HEAD_H + 'px ' + rows.map(function(r) {
+      return (r.type === 'divider' ? DIVIDER_H : r.rowH) + 'px';
+    }).join(' ');
+
+    function place(elm, row, colStart, colEnd) {
+      elm.style.gridRow = row;
+      elm.style.gridColumn = colStart + ' / ' + colEnd;
+      gantt.appendChild(elm);
+    }
+
+    // 모서리
+    var corner = document.createElement('div');
+    corner.className = 'corner';
+    place(corner, 1, 1, 2);
+
+    // 날짜 헤더 + 오늘 강조 배경(맨 뒤에 깔림)
+    for (var i = 0; i < WINDOW_DAYS; i++) {
+      var d = addDays(windowStart, i);
+      var iso = toISO(d);
+      var holiday = holidayName(iso);
+      // 주말이든 공휴일이든 똑같이 빨간 날로 보여준다(2026-09-09 사장님 요청 -
+      // "주말하고 빨간날을 구분해주고" - 평일에 낀 공휴일도 표시되게 함).
+      var isRedDay = d.getDay() === 0 || d.getDay() === 6 || !!holiday;
+      var isToday = iso === todayStr;
+      var head = document.createElement('div');
+      head.className = 'date-head' + (isRedDay ? ' weekend' : '') + (isToday ? ' is-today' : '');
+      if (holiday) head.title = holiday;
+      head.innerHTML = (d.getMonth() + 1) + '/' + d.getDate() + '<b>' + DAY_LABELS[d.getDay()] + '</b>' +
+          (holiday ? '<span class="holiday-name">' + holiday + '</span>' : '');
+      place(head, 1, i + 2, i + 3);
+
+      // 오늘은 눈에 띄는 앰버 틴트로, 공휴일(오늘이 아닐 때)은 연한 붉은 음영으로
+      // 그 날짜 칸 전체(장비 행 전부)를 구분해준다(2026-09-10 사장님 요청).
+      if (isToday) {
+        var todayBg = document.createElement('div');
+        todayBg.className = 'today-col';
+        todayBg.setAttribute('data-col', i);
+        place(todayBg, '1 / ' + (rows.length + 2), i + 2, i + 3);
+      } else if (holiday) {
+        var holidayBg = document.createElement('div');
+        holidayBg.className = 'holiday-col';
+        holidayBg.setAttribute('data-col', i);
+        place(holidayBg, '1 / ' + (rows.length + 2), i + 2, i + 3);
+      }
+    }
+
+    // 구분 행(모델 그룹 표시) + 스캐너별 행 배경 + 라벨 + 예약 막대
+    rows.forEach(function(r, idx) {
+      var row = idx + 2;
+
+      if (r.type === 'divider') {
+        var dBg = MODEL_COLORS[r.model] || '#8B9698';
+        var isCollapsed = !!collapsedGroups[r.model];
+        // 구분줄(배경 띠 + 왼쪽 이름표)을 누르면 그 그룹을 접었다 펼 수 있다
+        // (2026-09-10 사장님 요청). 둘 다 같은 동작이라 탭 영역이 넓다.
+        var toggleGroup = (function(model) {
+          return function() {
+            collapsedGroups[model] = !collapsedGroups[model];
+            render(lastData);
+          };
+        })(r.model);
+
+        var band = document.createElement('div');
+        band.className = 'model-divider-band';
+        band.style.background = dBg + '26';
+        band.onclick = toggleGroup;
+        place(band, row, 1, WINDOW_DAYS + 2);
+
+        var lbl = document.createElement('div');
+        lbl.className = 'model-divider-label';
+        lbl.style.background = dBg;
+        lbl.innerHTML = '<span class="group-chevron' + (isCollapsed ? ' collapsed' : '') + '">▾</span>' +
+            '<span>' + r.model + '</span>';
+        lbl.onclick = toggleGroup;
+        place(lbl, row, 1, 2);
+        return;
+      }
+
+      var s = r.data;
+      var labelBg = MODEL_COLORS[s.model] || '#8B9698';
+      var label = document.createElement('div');
+      label.className = 'label';
+      label.setAttribute('data-row', row);
+      label.style.borderLeft = '4px solid ' + labelBg;
+      label.innerHTML = s.label + '<span class="sub">' + s.scanner_id +
+          (s.maintenance ? ' · <span style="color:var(--maint)">🔧 점검중</span>' : '') + '</span>';
+      // 스캐너 이름을 누르면 호텔 예약 사이트처럼 전체화면 달력이 뜨고, 거기서
+      // 시작일/반납예정일을 고른다(2026-09-09 사장님 요청). 점검/수리중인 장비는
+      // 새로 예약할 수 없으므로 달력 대신 안내만 보여준다(2026-09-10 사장님 요청).
+      label.style.cursor = 'pointer';
+      label.onclick = (function(scannerId, scannerLabel, maintenance, maintenanceNote) {
+        return function() {
+          if (maintenance) {
+            showAlert('🔧 "' + scannerLabel + '"은(는) 지금 점검/수리중이라 예약할 수 없습니다.' +
+                (maintenanceNote ? ('\n사유: ' + maintenanceNote) : ''));
+            return;
+          }
+          openMonthPicker(scannerId, scannerLabel);
+        };
+      })(s.scanner_id, s.label, s.maintenance, s.maintenance_note);
+      place(label, row, 1, 2);
+
+      var rowBg = document.createElement('div');
+      rowBg.className = 'row-bg';
+      rowBg.setAttribute('data-row', row);
+      place(rowBg, row, 2, WINDOW_DAYS + 2);
+
+      var myReservations = byScanner[s.scanner_id] || [];
+      function isDateFree(iso) {
+        for (var i = 0; i < myReservations.length; i++) {
+          if (iso >= myReservations[i].start_date && iso <= myReservations[i].end_date) return false;
+        }
+        return true;
+      }
+      // 빈 날짜 칸을 누르면 그 스캐너·그 날짜가 미리 채워진 대여 화면으로 이동한다
+      // (2026-09-09 사장님 요청 - 호텔 예약 사이트처럼 달력 보고 바로 클릭해서 예약).
+      for (var day = 0; day < WINDOW_DAYS; day++) {
+        var cellDate = addDays(windowStart, day);
+        var cellIso = toISO(cellDate);
+        // 점검/수리중인 장비는 빈 날짜라도 클릭해서 새로 예약할 수 없다
+        // (2026-09-10 사장님 요청).
+        var free = cellIso >= todayStr && isDateFree(cellIso) && !s.maintenance;
+        var isPendingStart = pending.scannerId === s.scanner_id && pending.startIso === cellIso;
+        var cell = document.createElement('div');
+        cell.className = 'day-cell' + (free ? ' free' : '') + (isPendingStart ? ' pending-start' : '');
+        cell.setAttribute('data-row', row);
+        if (free) {
+          cell.title = isPendingStart ? (cellIso + ' · 시작일로 선택됨, 종료일을 눌러주세요')
+                                       : (cellIso + ' · 눌러서 선택');
+          cell.onclick = (function(scannerId, dateIso, scannerLabel) {
+            return function() { handleCellClick(scannerId, dateIso, scannerLabel); };
+          })(s.scanner_id, cellIso, s.label);
+        }
+        place(cell, row, day + 2, day + 3);
+      }
+
+      (byScanner[s.scanner_id] || []).forEach(function(res) {
+        var startIdx = dayIndex(res.start_date, windowStart);
+        var endIdx = dayIndex(res.end_date, windowStart); // 포함(inclusive) 마지막 날
+        var clipStart = Math.max(startIdx, 0);
+        var clipEnd = Math.min(endIdx, WINDOW_DAYS - 1);
+        if (clipStart > clipEnd) return; // 이 창(window) 밖 기간
+        var bar = document.createElement('div');
+        bar.className = 'bar ' + (res.status === '대여중' ? 'held' : 'reserved');
+        // 막대가 짧으면 예약자명이 다 안 들어갈 수 있어서, 안쪽에 말줄임(ellipsis)
+        // 전용 span으로 감싼다(2026-09-10 사장님 요청 - "막대 안에 예약자명이나
+        // 부서명이 말줄임으로 보이게"). 막대 자체는 overflow:visible이라
+        // 그대로는 말줄임이 안 먹혀서 이렇게 한 겹 더 감싼다.
+        var barLabel = document.createElement('span');
+        barLabel.className = 'bar-label';
+        // 시간 단위 예약(2026-09-10 사장님 요청)이면 이름 옆에 시간도 같이
+        // 보여준다 - 막대 너비 자체는 그대로 하루짜리라, 시간 정보는 글자로만
+        // 구분된다(사장님이 고른 "간단한" 방식).
+        var timeTag = (res.start_time && res.end_time) ? (' ' + res.start_time + '~' + res.end_time) : '';
+        barLabel.textContent = res.employee_name + timeTag;
+        bar.appendChild(barLabel);
+        bar.title = res.employee_name + timeTag + ' · ' + res.start_date + ' ~ ' + res.end_date + ' (' + res.status + ') · 눌러서 삭제 · 끌어서 이동';
+        bar.style.cursor = 'grab';
+        // 이미 있는 예약을 눌러서 바로 삭제(반납/취소)할지 물어본다(2026-09-09
+        // 사장님 요청 - "수정하러가기가 아니라 바로 삭제할지").
+        bar.onclick = (function(scannerId, scannerLabel, res, barEl) {
+          return function() {
+            // 드래그로 날짜를 바꾼 직후 발생하는 클릭은 삭제창을 띄우지 않는다.
+            if (barEl.dataset.justDragged) { delete barEl.dataset.justDragged; return; }
+            showDeleteConfirmSheet(scannerId, scannerLabel, res, barEl);
+          };
+        })(s.scanner_id, s.label, res, bar);
+
+        // 막대 양쪽 끝을 손가락/마우스로 잡아 늘리고 줄여서 기간을 조절할 수 있게
+        // 한다(2026-09-09 사장님 요청 - "터치로 드래그해서 조절"). 이미 가져간
+        // 예약(대여중)은 서버 규칙상 시작일을 못 바꾸므로 왼쪽 손잡이는 숨긴다.
+        if (res.status !== '대여중') {
+          var leftHandle = document.createElement('div');
+          leftHandle.className = 'bar-handle left';
+          bar.appendChild(leftHandle);
+          attachResizeHandle(leftHandle, bar, s.scanner_id, res, 'start', todayStr);
+        }
+        var rightHandle = document.createElement('div');
+        rightHandle.className = 'bar-handle right';
+        bar.appendChild(rightHandle);
+        attachResizeHandle(rightHandle, bar, s.scanner_id, res, 'end', todayStr);
+
+        // 막대 몸통(양쪽 끝 손잡이 말고 가운데)을 좌우로 끌면 기간 길이는 그대로
+        // 유지한 채 통째로 다른 날짜로 옮긴다(2026-09-11 사장님 요청 - "예약된
+        // 부분을 클릭해서 기간을 조정할때 드래그해서 이동해서 수정"). 실제로
+        // 끌지 않고 그냥 누르기만 하면(클릭) 기존처럼 삭제 확인창이 뜬다.
+        attachMoveHandle(bar, s.scanner_id, res, todayStr);
+
+        // 이 행에 시간 단위로 겹쳐있는 예약이 있으면(maxLanes > 1) 막대 높이를
+        // 줄이고 자기 순번(lane)만큼 아래로 내려서 겹치지 않게 배치한다.
+        if (r.maxLanes > 1) {
+          var lane = r.laneMap[res.reservation_id] || 0;
+          bar.style.alignSelf = 'start';
+          bar.style.height = (LANE_H - 4) + 'px';
+          bar.style.margin = (4 + lane * LANE_H) + 'px 2px 0 2px';
+        }
+
+        place(bar, row, clipStart + 2, clipEnd + 3);
+      });
+    });
+
+    if (!scanners.length) {
+      gantt.innerHTML = '<div class="empty">스캐너 목록을 불러오는 중이거나 없습니다.</div>';
+    }
+  }
+
+  // 날짜 범위를 안 주면 반납되지 않은 예약을 전부 받아온다(활성 예약만이라
+  // 어차피 얼마 안 됨) - 이렇게 한 번에 다 받아두면 이전달/다음달로 옮길 때마다
+  // 서버에 다시 물어볼 필요가 없어서 바로바로 반응한다(2026-09-09 사장님 요청).
+  // 처음 접속했을 때 예약 목록을 다 받아오기 전까지만 전체화면 로딩 표시를
+  // 보여준다(2026-09-10 사장님 요청). 달을 옮길 때(shiftMonth)는 lastData가
+  // 이미 있으면 서버에 다시 안 물어보고 바로 다시 그리므로 이 함수 자체가
+  // 안 불리고, 그래서 로딩 화면도 다시 뜨지 않는다.
+  var firstLoadDone = false;
+  function hidePageLoadingOverlay_() {
+    var overlay = el('pageLoadingOverlay');
+    if (!overlay) return;
+    overlay.classList.add('fade-out');
+    setTimeout(function() { overlay.classList.add('hidden'); }, 260);
+  }
+
+  function load() {
+    // 보관 위치 사진도 이제 이 응답 안에 같이 실려오므로(render() 참고) 따로
+    // 요청을 더 보낼 필요가 없다 - 요청이 하나뿐이라 더 빠르게 뜬다(2026-09-09
+    // 사장님 요청 - "미리... 사진을 찾고 있는건 어때? 더 빨리 찾아질거같은데").
+    // fetch 체인을 그대로 리턴해서, 새로고침 버튼(scanner-ui.js의 dsRefresh_)이
+    // 다 끝날 때까지 기다렸다가 스핀 아이콘을 멈출 수 있게 한다(2026-09-11).
+    return fetch(APPS_SCRIPT_URL + '?action=list_reservations&token=' + APPS_SCRIPT_TOKEN)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        // 2026-09-16 추가 - 배포 중 점검모드일 때는 list_reservations가 데이터
+        // 대신 이 오류를 돌려준다(.gs 참고). 화면 전체를 점검 안내로 덮는다.
+        if (data && data.error === 'maintenance') {
+          window.dsCheckMaintenance_({ maintenance_mode: true, maintenance_message: data.maintenance_message });
+          if (!firstLoadDone) { firstLoadDone = true; hidePageLoadingOverlay_(); }
+          return;
+        }
+        window.dsCheckMaintenance_({ maintenance_mode: false });
+        // 구글시트 쪽이 배포 직후 등 잠깐 불안정할 때 scanners가 없는 이상한
+        // 응답이 올 수 있다(2026-09-11 실제 확인) - 그대로 render()에 넘기면
+        // "TypeError: undefined..." 같은 알아보기 힘든 오류가 화면에 남는다.
+        // 여기서 먼저 걸러서 아래 catch의 안내 문구로 보내고, 새로고침 버튼을
+        // 누르면 대부분 바로 해결된다.
+        if (!data || !data.scanners) {
+          throw new Error(data && data.error ? data.error : 'bad_response');
+        }
+        return render(data);
+      })
+      .then(function() {
+        if (!firstLoadDone) { firstLoadDone = true; hidePageLoadingOverlay_(); }
+      })
+      .catch(function(err) {
+        el('gantt').innerHTML = '<div class="empty">잠시 불러오지 못했습니다. 아래 새로고침(⟳) 버튼을 눌러 다시 시도해주세요.</div>';
+        if (!firstLoadDone) { firstLoadDone = true; hidePageLoadingOverlay_(); }
+      });
+  }
+
+  // 마우스로 장비 행을 훑을 때 그 행 전체(이름칸+날짜칸들)가 같이 밝아지도록
+  // 한다(2026-09-10 사장님 요청 - "호버 시 해당 행 전체가 하이라이트"). render()가
+  // gantt 안쪽 내용을 통째로 다시 그려도(innerHTML='') gantt 엘리먼트 자체는 그대로
+  // 남아있으므로, 이 리스너는 한 번만 걸어두면 매번 다시 그려진 행에도 그대로
+  // 적용된다(각 셀에 찍어둔 data-row 값으로 같은 행끼리 묶어서 켜고 끈다).
+  (function setupRowHover() {
+    var gantt = el('gantt');
+    var hoveredRow = null;
+    function setHover(rowIdx) {
+      if (rowIdx === hoveredRow) return;
+      if (hoveredRow) {
+        Array.prototype.forEach.call(gantt.querySelectorAll('[data-row="' + hoveredRow + '"]'), function(elm) {
+          elm.classList.remove('row-hover');
+        });
+      }
+      hoveredRow = rowIdx;
+      if (hoveredRow) {
+        Array.prototype.forEach.call(gantt.querySelectorAll('[data-row="' + hoveredRow + '"]'), function(elm) {
+          elm.classList.add('row-hover');
+        });
+      }
+    }
+    gantt.addEventListener('mousemove', function(e) {
+      var t = e.target.closest ? e.target.closest('[data-row]') : null;
+      setHover(t ? t.getAttribute('data-row') : null);
+    });
+    gantt.addEventListener('mouseleave', function() { setHover(null); });
+  })();
+
+  // scanner-ui.js가 뒤로/앞으로 버튼 옆에 새로고침 버튼도 같이 넣어주도록,
+  // 이 값이 있으면 그 버튼을 눌렀을 때 이 함수를 부른다(2026-09-11 사장님
+  // 요청 - "새로고침을 할 수 있는 버튼을 만들어줘").
+  window.dsRefresh_ = load;
+  load();
+</script>
+</body>
+</html>
