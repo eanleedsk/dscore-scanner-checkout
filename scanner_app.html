@@ -404,6 +404,10 @@
   var qsStartDate = qsParams.get('start_date');
   var qsEndDate = qsParams.get('end_date');
   var qsFocus = qsParams.get('focus');
+  // NFC 스티커에 적힌 주소에만 "&via=nfc"를 붙여둬서, NFC를 대서 들어온 경우만
+  // 구분한다(2026-09-16 사장님 요청 - "NFC 태그 이후 등록한 장비라고 메일로
+  // 알려줬으면 좋겠어"). QR코드나 그냥 링크로 들어오면 이 값이 없어서 'web'.
+  var requestSource = qsParams.get('via') === 'nfc' ? 'nfc' : 'web';
 
   // 정면/옆면/전체/시리얼 순서로 4장을 안내하며 찍는다(2026-09-09 사장님 요청 -
   // "야놀자/여기어때처럼 자세하게"). serial 단계만 기존처럼 제미나이로 자동
@@ -960,6 +964,7 @@
       photo_overall_base64: state.photos.overall || '',
       serial_check: state.serialOverride ? 'mismatch(수동진행)' : (state.serialStatus || ''),
       note: buildNote(),
+      source: requestSource,
     }).then(function(res) { handleActionResult('reserve', res); })
       .catch(function(err) {
         state.busy = false;
@@ -1002,6 +1007,7 @@
       photo_overall_base64: state.photos.overall || '',
       serial_check: state.serialOverride ? 'mismatch(수동진행)' : (state.serialStatus || ''),
       note: buildNote(),
+      source: requestSource,
     }).then(function(res) { handleActionResult('confirm_pickup', res); })
       .catch(function(err) { state.busy = false; showMsg('연결에 실패했습니다: ' + err, 'error'); renderActionButtons(); });
   }
@@ -1020,6 +1026,7 @@
       reservation_id: target.reservation_id,
       note: buildNote(),
       employee_name: target.holder || '',
+      source: requestSource,
     }).then(function(res) { handleActionResult('return', res); })
       .catch(function(err) { state.busy = false; showMsg('연결에 실패했습니다: ' + err, 'error'); renderActionButtons(); });
   }
