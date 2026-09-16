@@ -1,0 +1,1484 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Dentsply Sirona Korea | Scanner Booking</title>
+
+  <link rel="manifest" href="./static/scanner-manifest.json">
+  <link rel="icon" href="./static/icons/scanner-icon-192.png">
+  <link rel="apple-touch-icon" href="./static/icons/scanner-apple-touch-icon.png">
+  <meta name="theme-color" content="#0A2540">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Scanner Booking">
+  <link rel="stylesheet" as="style" crossorigin
+        href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+
+  <style>
+    :root {
+      /* 2026-09-10 사장님 요청 - 예약 달력/현황판과 같은 "덴츠플라이시로나 스타일"
+         네이비/앰버 톤으로 맞춤(대여중=파란색, 예약됨=앰버로 세 화면 색을 통일). */
+      --navy: #0A2540;
+      --brand: #EA7600; --brand-hover: #C96200; --bg: #F4F6F9; --surface: #fff;
+      --border: #E2E8F0; --text: #0F1B2D; --muted: #64748B;
+      --held-bg: #E7EFFC; --held-text: #3F6FBE;
+      --reserved-bg: #FBF0DC; --reserved-text: #B36A00;
+    }
+    * { box-sizing: border-box; }
+    /* 버튼을 연달아 빠르게 누르면 브라우저가 "두 번 눌러서 확대"로 착각해 화면이
+       확대/축소되는 문제가 있었다(2026-09-09 사장님 요청) - 버튼은 확대용이
+       아니므로 전부 꺼둔다. */
+    button { touch-action: manipulation; }
+    body { margin: 0; padding: 16px; background: var(--bg); color: var(--text);
+           font-family: 'Pretendard', -apple-system, "Malgun Gothic", sans-serif;
+           animation: pageFadeIn .35s ease; }
+    @keyframes pageFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .page-loading-overlay {
+      position: fixed; inset: 0; z-index: 999; background: var(--bg);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 14px; transition: opacity .25s ease;
+    }
+    /* 전역 .hidden(display:none)을 쓰면 즉시 사라져서 부드럽게 옅어지는 효과가
+       안 보이므로, 따로 이름을 붙인 클래스로 opacity만 다룬다. */
+    .page-loading-overlay.fade-out { opacity: 0; pointer-events: none; }
+    .page-loading-mark {
+      width: 42px; height: 42px; border-radius: 11px; background: var(--navy); color: #fff;
+      display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px;
+    }
+    .page-loading-spinner {
+      width: 24px; height: 24px; border-radius: 50%; border: 3px solid var(--border);
+      border-top-color: var(--brand); animation: pageLoadingSpin .7s linear infinite;
+    }
+    @keyframes pageLoadingSpin { to { transform: rotate(360deg); } }
+    .page-loading-text { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+    .brand-header { display: flex; align-items: center; gap: 9px; margin: 4px 0 14px; }
+    .brand-mark {
+      width: 28px; height: 28px; border-radius: 7px; background: var(--navy); color: #fff;
+      display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 11.5px;
+      flex: none;
+    }
+    .brand-text { display: flex; flex-direction: column; line-height: 1.25; }
+    .brand-name { font-size: 12.5px; font-weight: 800; color: var(--navy); letter-spacing: -.1px; }
+    .brand-sub { font-size: 10px; font-weight: 600; color: var(--muted); }
+
+    /* 예약 진행 단계 표시(야놀자/여기어때 스타일 진행 바, 2026-09-09 사장님 요청) -
+       클릭해서 이동하는 탭이 아니라, 지금 어디까지 채웠는지 한눈에 보여주는 용도. */
+    .progress-steps { display: flex; align-items: center; margin: 0 0 16px; }
+    .progress-step { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: none; }
+    .progress-dot { width: 25px; height: 25px; border-radius: 50%; background: var(--surface);
+                     border: 1.5px solid var(--border); color: var(--muted);
+                     display: flex; align-items: center; justify-content: center;
+                     font-size: 11.5px; font-weight: bold; transition: all .2s; }
+    .progress-step.done .progress-dot { background: var(--brand); border-color: var(--brand); color: #fff; }
+    .progress-label { font-size: 10px; color: var(--muted); white-space: nowrap; }
+    .progress-step.done .progress-label { color: var(--text); font-weight: bold; }
+    .progress-line { flex: 1; height: 2px; background: var(--border); margin: 0 2px 15px; transition: background .2s; }
+    .progress-line.done { background: var(--brand); }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+            padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(10,37,64,0.05); }
+    .label { font-size: 12px; color: var(--muted); font-weight: bold; margin-bottom: 8px;
+              display: flex; align-items: center; gap: 6px; }
+    .scanner-name { font-size: 17px; font-weight: bold; }
+    .badge { display: inline-block; margin-top: 6px; padding: 3px 10px; border-radius: 20px;
+             font-size: 12px; font-weight: bold; }
+    .badge.available { background: #E4F4EE; color: #127A5B; }
+    .badge.held { background: var(--held-bg); color: var(--held-text); }
+    .badge.reserved { background: var(--reserved-bg); color: var(--reserved-text); }
+    .badge.overdue { background: #FBE1E1; color: #B5140A; }
+    .badge.maintenance { background: #F1E4FB; color: #6B3FA0; }
+    .maintenance-note { font-size: 12px; color: #6B3FA0; margin-top: 4px; }
+    .last-location {
+      margin-top: 10px; padding-top: 10px; border-top: 1px dashed #D8DEDF;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .last-location-label { font-size: 12px; color: var(--muted); font-weight: bold; }
+    .last-location-photo {
+      width: 60px; height: 60px; border-radius: 9px; object-fit: cover;
+      border: 1.5px solid #D8DEDF; margin-left: auto; cursor: zoom-in;
+    }
+    .last-location-btn {
+      background: #F3F6F7; font-size: 22px; display: flex; align-items: center;
+      justify-content: center; padding: 0; font-family: inherit;
+    }
+    .last-location-btn:disabled { opacity: 0.6; cursor: default; }
+    .grid { display: flex; flex-wrap: wrap; gap: 8px; }
+    .date-row { display: flex; flex-direction: column; gap: 10px; }
+    .date-row + .date-row { margin-top: 12px; }
+    .date-field { min-width: 0; }
+    .date-field .field-label { font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
+    .time-toggle {
+      display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px;
+      font-weight: 600; color: var(--text); cursor: pointer;
+    }
+    .time-toggle input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--brand); }
+    /* 아이폰 사파리의 <input type="date"> 자체 렌더링(달력 아이콘, 값 표시
+       영역 등)이 CSS로 아무리 크기를 지정해도 카드 밖으로 튀어나오는 문제가
+       계속 있었다(2026-09-10 사장님 요청 - "이 방법도 칸이 밖으로 튀어나와" -
+       나란히 배치 → 위아래 배치 → 내부 여백 제거까지 다 해봐도 안 잡힘).
+       그래서 아예 진짜 <input type="date">는 화면에 안 보이게 숨기고
+       (photo-input-hidden 클래스, 이 파일에서 사진 촬영용 숨김 입력칸에
+       이미 쓰던 것과 같은 방식), 우리가 완전히 디자인을 통제할 수 있는
+       버튼을 대신 보여준다 - 버튼을 누르면 숨겨둔 진짜 날짜칸의 달력을
+       코드로 띄운다(openDatePicker 참고). 이러면 사파리가 내부적으로 뭘
+       하든 화면에 안 보이니 튀어나올 수가 없다. */
+    input.name-input {
+      font-family: inherit; font-size: 14px; padding: 0 12px; height: 44px;
+      line-height: 44px; border-radius: 9px; border: 1.5px solid var(--border);
+      width: 100%; box-sizing: border-box; background: var(--surface); color: var(--text);
+    }
+    input.name-input:focus { outline: none; border-color: var(--brand); }
+    .date-display {
+      display: block; font-family: inherit; font-size: 14px; padding: 0 12px; height: 44px;
+      line-height: 42px; border-radius: 9px; border: 1.5px solid var(--border);
+      width: 100%; box-sizing: border-box; background: var(--surface); color: var(--text);
+      text-align: left; cursor: pointer;
+    }
+    .date-display.empty { color: var(--muted); }
+    .date-display:active { border-color: var(--brand); }
+    /* 시간 지정은 <input type="time">의 네이티브 피커(showPicker/포커스)에 기대지
+       않고 시/분을 각각 고르는 드롭다운으로 만든다(2026-09-10 사장님 요청 -
+       "시간 설정할때 시간이 나오지 않아" - 기기별로 네이티브 시간 피커가 안 뜨는
+       경우가 있어서, 반납예정일 문제 때와 같은 이유로 아예 브라우저 기본 UI에
+       의존하지 않는 방식으로 바꿈. select는 어떤 브라우저에서도 항상 값이 바로
+       보인다). */
+    .time-select-group { display: flex; align-items: center; gap: 6px; }
+    .time-select {
+      flex: 1; min-width: 0; font-family: inherit; font-size: 14px; padding: 0 6px;
+      height: 44px; border-radius: 9px; border: 1.5px solid var(--border);
+      background: var(--surface); color: var(--text); box-sizing: border-box;
+    }
+    .time-colon { font-weight: bold; color: var(--muted); flex: none; }
+    .note-input { font-family: inherit; font-size: 14px; padding: 10px 12px; border-radius: 9px;
+                   border: 1.5px solid var(--border); width: 100%; box-sizing: border-box; resize: vertical; }
+
+    /* ---- 4단계 사진 촬영(정면/옆면/전체/시리얼, 2026-09-09 사장님 요청) ---- */
+    .photo-stepper { display: flex; gap: 6px; margin-bottom: 14px; }
+    .photo-pill {
+      flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+      padding: 8px 4px; border-radius: 9px; background: #EEF1F1; cursor: pointer;
+      border: 1.5px solid transparent; transition: all .15s;
+    }
+    .photo-pill .pill-icon {
+      width: 22px; height: 22px; border-radius: 50%; background: var(--surface);
+      color: var(--muted); font-size: 11px; font-weight: bold;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .photo-pill.done .pill-icon { background: #127A5B; color: #fff; }
+    .photo-pill.active { background: #FDECD8; border-color: var(--brand); }
+    .photo-pill.active .pill-icon { background: var(--brand); color: #fff; }
+    .photo-pill .pill-label { font-size: 10.5px; color: var(--muted); font-weight: bold; }
+    .photo-pill.active .pill-label, .photo-pill.done .pill-label { color: var(--text); }
+
+    .photo-step-body { background: var(--bg); border-radius: 10px; padding: 14px; }
+    .photo-step-title { font-size: 13.5px; font-weight: bold; margin-bottom: 3px; }
+    .photo-step-hint { font-size: 11.5px; color: var(--muted); margin-bottom: 10px; line-height: 1.4; }
+    .photo-row { display: flex; align-items: center; gap: 12px; }
+    .photo-btn { padding: 11px 16px; border-radius: 9px; background: var(--brand); color: #fff;
+                 font-size: 13.5px; font-weight: bold; display: inline-block; }
+    .photo-btn.done { background: #127A5B; }
+    .photo-thumb { width: 56px; height: 56px; border-radius: 9px; object-fit: cover; display: none;
+                    border: 1.5px solid var(--border); }
+    .photo-step-links { display: flex; gap: 16px; margin-top: 10px; }
+    .photo-step-links button {
+      background: none; border: none; color: var(--muted); font-size: 12px; font-weight: bold;
+      text-decoration: underline; padding: 0; font-family: inherit; cursor: pointer;
+    }
+    .photo-skip-all { display: block; margin-top: 10px; }
+
+    .hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
+    .checking-hint { color: var(--brand); font-weight: bold; }
+    .serial-status { font-size: 12.5px; margin-top: 10px; font-weight: bold; }
+    .serial-status.checking { color: var(--muted); }
+    .serial-status.match { color: #127A5B; }
+    .serial-status.fail { color: #B5140A; }
+    .override-btn { display: block; margin-top: 8px; padding: 8px 12px; border-radius: 8px;
+                    background: #FBE1E1; color: #B5140A; font-size: 12.5px; font-weight: bold; }
+    button { border: none; cursor: pointer; font-family: inherit; }
+    .pick-btn { padding: 9px 12px; border-radius: 8px; background: #EEF1F1; color: var(--text);
+                font-size: 13.5px; text-align: left; line-height: 1.4; }
+    .pick-btn.active { background: var(--brand); color: #fff; }
+    .pick-btn .sub { display: block; font-size: 11px; font-weight: normal; margin-top: 2px; opacity: 0.85; }
+    .pick-btn.active .sub { opacity: 0.95; }
+    .model-tag { display: inline-block; padding: 2px 7px; border-radius: 5px; font-size: 10.5px;
+                 font-weight: bold; color: #fff; vertical-align: middle; }
+    .model-group-label { width: 100%; font-size: 11.5px; font-weight: bold; margin: 12px 0 6px; }
+    .model-group-label:first-child { margin-top: 0; }
+    .change-link { background: none; color: var(--brand); font-size: 12px; text-decoration: underline;
+                   padding: 0; margin-top: 8px; }
+    .action-row { display: flex; gap: 10px; margin-top: 4px; }
+    .action-btn { flex: 1; padding: 14px; border-radius: 9px; font-size: 15px; font-weight: bold;
+                  color: #fff; transition: transform .05s; }
+    .action-btn:active { transform: scale(0.98); }
+    .action-btn.primary { background: var(--brand); }
+    .action-btn.primary:active { background: var(--brand-hover); }
+    .action-btn.danger { background: #B5140A; }
+    .action-btn.secondary { background: #6B7678; }
+    .action-btn:disabled { background: #C9D0D1; }
+    .msg { font-size: 13px; margin-top: 10px; }
+    .msg.error { color: #B5140A; }
+    /* 처리 완료 메시지를 그냥 작은 글자가 아니라 눈에 띄는 배너로 보여준다(2026-09-08
+       사장님 요청 - "대여가 완료되면 대여되었다고 화면에 뜨도록"). */
+    .msg.ok { color: #127A5B; background: #E4F4EE; border: 1px solid #BEE6D6; border-radius: 10px;
+              padding: 12px 14px; font-size: 14.5px; font-weight: bold; }
+    .msg.checking { color: var(--muted); }
+    .hidden { display: none; }
+    .photo-input-hidden { position: absolute; width: 1px; height: 1px; padding: 0;
+      margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    .edit-panel { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #D8DEDF; }
+    .highlight-pulse { outline: 3px solid var(--brand); outline-offset: 2px; }
+    @media (prefers-reduced-motion: no-preference) {
+      .highlight-pulse { animation: highlightPulse 1s ease-in-out 2; }
+    }
+    @keyframes highlightPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(234,118,0,0.35); }
+      50% { box-shadow: 0 0 0 8px rgba(234,118,0,0); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- 달력에서 "예, 대여할게요"를 누르고 이 화면으로 넘어올 때, 스캐너 정보를
+     구글시트에서 받아오는 동안(몇 초 걸릴 수 있음) 화면이 텅 비어 보여서
+     멈춘 것처럼 느껴진다는 사장님 피드백(2026-09-10 - "다음단계로 넘어갈때
+     로딩이 너무 오래걸리면... 로딩중이라는 창이 뜨도록"). 이 화면 전체를
+     덮는 로딩 화면을 페이지가 뜨자마자(자바스크립트 실행을 기다리지 않고)
+     바로 보여주고, 첫 데이터 로딩(loadConfig)이 끝나면 지운다. -->
+<div id="pageLoadingOverlay" class="page-loading-overlay">
+  <span class="page-loading-mark">DS</span>
+  <div class="page-loading-spinner"></div>
+  <div class="page-loading-text">불러오는 중...</div>
+</div>
+
+<div class="brand-header">
+  <span class="brand-mark">DS</span>
+  <div class="brand-text">
+    <span class="brand-name">Dentsply Sirona</span>
+    <span class="brand-sub">스캐너 대여현황</span>
+  </div>
+</div>
+<div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin:-8px 0 12px;">
+  <a class="change-link" href="scanner_status.html" style="text-decoration:underline;">전체 현황판 보기</a>
+  <a class="change-link" href="index.html" style="text-decoration:underline;">예약 달력 보기</a>
+</div>
+
+<div class="progress-steps" id="progressSteps"></div>
+
+<div class="card">
+  <div class="label">🔧 스캐너</div>
+  <div id="scannerCurrent"></div>
+  <button class="change-link" id="changeScannerBtn">스캐너 목록 보기</button>
+  <div id="scannerPicker" class="grid hidden" style="margin-top:10px;"></div>
+</div>
+
+<div class="card">
+  <div class="label">📅 대여 기간</div>
+  <div class="date-row">
+    <div class="date-field">
+      <div class="field-label">시작일</div>
+      <button type="button" class="date-display" id="startDateDisplay"></button>
+      <input type="date" id="startDateInput" class="photo-input-hidden">
+    </div>
+    <div class="date-field">
+      <div class="field-label">반납예정일</div>
+      <button type="button" class="date-display" id="endDateDisplay"></button>
+      <input type="date" id="endDateInput" class="photo-input-hidden">
+    </div>
+  </div>
+  <!-- 날짜(하루~여러 날) 단위 예약뿐 아니라 시간 단위 예약도 지원한다(2026-09-10
+       사장님 요청 - "날짜로만 대여하지말고 시간 단위로도 예약이 가능하도록",
+       "둘 다 유지, 사용자가 고름"). 시작일=반납예정일(하루)일 때만 의미가 있어서
+       그럴 때만 이 토글이 보인다. -->
+  <label class="time-toggle hidden" id="timeToggleLabel" for="timeToggleInput">
+    <input type="checkbox" id="timeToggleInput">
+    <span>⏱ 시간을 지정해서 예약</span>
+  </label>
+  <div class="date-row hidden" id="timeRow">
+    <div class="date-field">
+      <div class="field-label">시작 시간</div>
+      <div class="time-select-group">
+        <select id="startTimeHour" class="time-select"></select>
+        <span class="time-colon">:</span>
+        <select id="startTimeMin" class="time-select"></select>
+      </div>
+    </div>
+    <div class="date-field">
+      <div class="field-label">종료 시간</div>
+      <div class="time-select-group">
+        <select id="endTimeHour" class="time-select"></select>
+        <span class="time-colon">:</span>
+        <select id="endTimeMin" class="time-select"></select>
+      </div>
+    </div>
+  </div>
+  <div class="hint">시작일이 오늘이면 바로 대여, 미래 날짜면 예약만 됩니다. 위에서 스캐너를 고르면 그 기간에 쓸 수 있는지 표시됩니다.</div>
+  <div class="hint checking-hint hidden" id="rangeCheckingHint">⏳ 이 기간에 쓸 수 있는지 확인 중...</div>
+</div>
+
+<div class="card" id="photoCard">
+  <div class="label" id="photoCardLabel">📷 장비 사진 (선택사항)</div>
+  <div class="photo-stepper" id="photoStepper"></div>
+  <div class="photo-step-body" id="photoStepBody"></div>
+  <input type="file" id="photoInput" accept="image/*" capture="environment" class="photo-input-hidden">
+  <div id="serialStatus" class="serial-status hidden"></div>
+  <button class="override-btn hidden" id="serialOverrideBtn" type="button">그래도 진행하기</button>
+  <button class="change-link photo-skip-all" id="photoSkipAllBtn" type="button">사진 없이 진행하기</button>
+</div>
+
+<div class="card" id="employeeCard">
+  <div class="label">🙋 예약자 정보</div>
+  <input type="text" id="employeeInput" class="name-input"
+         placeholder="이름을 입력해주세요 (예: 이남훈(Ean))" autocomplete="off">
+</div>
+
+<div class="card">
+  <div class="label">📝 특이사항 (선택)</div>
+  <textarea id="noteInput" class="note-input" rows="2" placeholder="예: 액정에 스크래치 있음, 케이블 분실 등"></textarea>
+  <div id="actionButtons" class="action-row" style="margin-top:12px;"></div>
+  <div id="editPanel" class="edit-panel hidden">
+    <div class="label">예약 기간 수정</div>
+    <div class="date-row">
+      <div class="date-field">
+        <div class="field-label">시작일</div>
+        <button type="button" class="date-display" id="editStartDisplay"></button>
+        <input type="date" id="editStartInput" class="photo-input-hidden">
+      </div>
+      <div class="date-field">
+        <div class="field-label">반납예정일</div>
+        <button type="button" class="date-display" id="editEndDisplay"></button>
+        <input type="date" id="editEndInput" class="photo-input-hidden">
+      </div>
+    </div>
+    <label class="time-toggle hidden" id="editTimeToggleLabel" for="editTimeToggleInput">
+      <input type="checkbox" id="editTimeToggleInput">
+      <span>⏱ 시간을 지정해서 예약</span>
+    </label>
+    <div class="date-row hidden" id="editTimeRow">
+      <div class="date-field">
+        <div class="field-label">시작 시간</div>
+        <div class="time-select-group">
+          <select id="editStartTimeHour" class="time-select"></select>
+          <span class="time-colon">:</span>
+          <select id="editStartTimeMin" class="time-select"></select>
+        </div>
+      </div>
+      <div class="date-field">
+        <div class="field-label">종료 시간</div>
+        <div class="time-select-group">
+          <select id="editEndTimeHour" class="time-select"></select>
+          <span class="time-colon">:</span>
+          <select id="editEndTimeMin" class="time-select"></select>
+        </div>
+      </div>
+    </div>
+    <div class="action-row" style="margin-top:10px;">
+      <button class="action-btn primary" id="editSaveBtn">수정 저장</button>
+      <button class="action-btn secondary" id="editCancelBtn">취소</button>
+    </div>
+  </div>
+  <div id="msg" class="msg"></div>
+</div>
+
+<script src="./static/scanner-ui.js"></script>
+<script>
+  // 2026-09-16 추가 - 파이썬 사이트(Flask) 없이 화면이 구글 Apps Script와 직접
+  // 통신한다(깃허브 페이지 이전). postJson_ 도우미 안 주석에 CORS 관련 설명 있음.
+  var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzhUKOf5h55fg5-lGDKuS7N_6qGppE8okgRWj_BSgvjwTZzBE6ObN8zNJeqJokQZS7Z/exec';
+  var APPS_SCRIPT_TOKEN = 'e15f4d1e8766c80d0f2979713a49b7fe';
+
+  // scanner_id 없이 이 화면으로 바로 들어온 경우(예: 즐겨찾기/주소창에 직접 입력) -
+  // 예전엔 파이썬 서버가 대신 예약 달력으로 돌려보내줬는데, 정적 사이트라 서버가
+  // 없으니 화면이 스스로 판단해서 옮겨준다(2026-09-16).
+  if (!new URLSearchParams(window.location.search).get('scanner_id')) {
+    location.replace('index.html');
+  }
+
+  var MODEL_COLORS = { 'PS C': '#1E6FBF', 'PS 2': '#7A4FBF' };
+  function modelColor(model) { return MODEL_COLORS[model] || '#8B9698'; }
+  function todayISO() { return new Date().toISOString().split('T')[0]; }
+  // 달력 화면(index.html)에서 시작일~종료일을 눌러 넘어온 경우
+  // ?start_date=...&end_date=... 로 기간을 미리 채워준다(2026-09-09 사장님 요청).
+  var qsParams = new URLSearchParams(window.location.search);
+  var qsStartDate = qsParams.get('start_date');
+  var qsEndDate = qsParams.get('end_date');
+  var qsFocus = qsParams.get('focus');
+
+  // 정면/옆면/전체/시리얼 순서로 4장을 안내하며 찍는다(2026-09-09 사장님 요청 -
+  // "야놀자/여기어때처럼 자세하게"). serial 단계만 기존처럼 제미나이로 자동
+  // 확인/스캐너 자동인식에 쓰이고, 나머지 3장은 장비 상태 기록용으로만 저장된다.
+  var PHOTO_STEPS = [
+    { key: 'front', label: '정면', title: '① 정면 사진', hint: '장비 정면 전체가 잘 보이도록 찍어주세요.' },
+    { key: 'side', label: '옆면', title: '② 옆면 사진', hint: '옆에서 케이블 연결 부분이 보이도록 찍어주세요.' },
+    { key: 'overall', label: '전체', title: '③ 전체 사진', hint: '스캐너 본체와 케이스 등 전체 구성이 보이도록 찍어주세요.' },
+    { key: 'serial', label: '시리얼', title: '④ 시리얼 번호 사진', hint: '시리얼 번호 스티커가 선명하게 보이도록 찍어주세요. 찍으면 자동으로 확인됩니다.' },
+  ];
+
+  var state = {
+    scanners: [],
+    selectedScanner: qsParams.get('scanner_id') || null,
+    selectedEmployee: null,
+    startDate: qsStartDate || todayISO(),
+    endDate: qsEndDate || '',
+    // 시간 단위 예약(2026-09-10 사장님 요청) - useTime이 꺼져 있으면 예전처럼
+    // 날짜(하루~여러 날) 단위 예약, 켜져 있으면 이 시간만 딱 대여한다(같은 날 안).
+    useTime: false,
+    startTime: '',
+    endTime: '',
+    photos: { front: null, side: null, overall: null, serial: null },
+    photoStepIndex: 0,
+    serialStatus: null,
+    serialAttempts: 0,
+    serialOverride: false,
+    serialMsg: '',
+    // 지금 시리얼 사진이 실제로 "이 스캐너"라고 확인된 것인지 추적한다(2026-09-08).
+    // 예: A 스캐너 사진으로 확인된 뒤에 사람이 목록에서 B 스캐너를 다시 고르면,
+    // 이 값이 B와 달라지므로 serialOk()가 더 이상 통과시키지 않는다 - "다른 스캐너를
+    // 골라놓고 엉뚱한 스캐너 사진을 찍었는데 그대로 진행된" 사고를 막기 위한 안전장치.
+    verifiedForScanner: null,
+    editingDates: false,
+    busy: false,
+  };
+  var SERIAL_RETRY_LIMIT = 3;
+
+  function el(id) { return document.getElementById(id); }
+
+  // ---- 숨겨둔 진짜 <input type="date">를 대신해 보여주는 버튼(2026-09-10
+  // 사장님 요청 - 사파리에서 날짜칸이 카드 밖으로 튀어나오는 문제를 아예
+  // 날짜칸을 안 보이게 숨기는 방식으로 해결). 버튼 글자를 실제 값과 맞춰두고,
+  // 버튼을 누르면 숨겨둔 진짜 날짜칸의 달력을 띄운다. ----
+  function formatDateDisplay_(iso) {
+    if (!iso) return '날짜 선택';
+    var p = iso.split('-');
+    return p[0] + '. ' + (+p[1]) + '. ' + (+p[2]) + '.';
+  }
+  function syncDateDisplay_(inputId, displayId) {
+    var input = el(inputId), display = el(displayId);
+    display.textContent = formatDateDisplay_(input.value);
+    display.classList.toggle('empty', !input.value);
+  }
+  // 날짜/시간 둘 다 같은 방식으로 열 수 있어서(showPicker는 input type과 상관없이
+  // 똑같이 동작) 이 함수 하나를 시간 버튼에도 그대로 재사용한다.
+  function openDatePicker_(inputId) {
+    var input = el(inputId);
+    if (typeof input.showPicker === 'function') {
+      try { input.showPicker(); return; } catch (e) { /* 아래 대체 방법으로 진행 */ }
+    }
+    input.focus();
+  }
+  // 시/분을 각각 고르는 select 두 개로 시간을 정한다(2026-09-10 - <input
+  // type="time">의 네이티브 피커가 기기에 따라 안 뜨는 문제 때문에, 날짜칸과
+  // 달리 시간칸은 "숨긴 진짜 입력칸 + 버튼" 방식을 쓰지 않고 select 자체를
+  // 그대로 보여준다 - select는 항상 지금 선택된 값이 바로 보인다).
+  var TIME_MINUTES = ['00', '15', '30', '45'];
+  function populateTimeSelects_(hourId, minId) {
+    var hourSel = el(hourId), minSel = el(minId);
+    if (hourSel.options.length) return; // 이미 채워져 있으면 다시 안 만든다.
+    for (var h = 0; h < 24; h++) {
+      var hh = (h < 10 ? '0' : '') + h;
+      var opt = document.createElement('option');
+      opt.value = hh; opt.textContent = hh + '시';
+      hourSel.appendChild(opt);
+    }
+    TIME_MINUTES.forEach(function(mm) {
+      var opt = document.createElement('option');
+      opt.value = mm; opt.textContent = mm + '분';
+      minSel.appendChild(opt);
+    });
+  }
+  function getTimeSelectValue_(hourId, minId) {
+    return el(hourId).value + ':' + el(minId).value;
+  }
+  function setTimeSelectValue_(hourId, minId, hhmm) {
+    var parts = (hhmm || '').split(':');
+    el(hourId).value = parts[0] || '09';
+    var mm = parts[1] || '00';
+    if (TIME_MINUTES.indexOf(mm) === -1) {
+      // 15분 단위가 아닌 값이 오면(이론상 없지만 방어적으로) 가장 가까운 값으로.
+      mm = TIME_MINUTES[Math.round((parseInt(mm, 10) || 0) / 15) % 4];
+    }
+    el(minId).value = mm;
+  }
+
+  function findScanner(id) {
+    for (var i = 0; i < state.scanners.length; i++) if (state.scanners[i].scanner_id === id) return state.scanners[i];
+    return null;
+  }
+  // 선택한 스캐너가 지금 대여중/예약된 상태인지(누구 것이든) - 2026-09-09
+  // 사장님 요청으로 "관리자 모드"를 없애면서, 수령확인/반납/기간수정 모두
+  // 본인 확인 없이 이 스캐너에 걸린 예약이면 누구나 처리할 수 있게 됨.
+  function activeReservationForSelectedScanner() {
+    var s = state.selectedScanner ? findScanner(state.selectedScanner) : null;
+    if (!s || s.status === 'available') return null;
+    return s;
+  }
+
+  function renderProgressSteps() {
+    var box = el('progressSteps');
+    var hasPhoto = state.photos.front || state.photos.side || state.photos.overall || state.photos.serial;
+    var steps = [
+      { label: '장비', done: !!state.selectedScanner },
+      { label: '기간', done: !!(state.startDate && state.endDate && (!state.useTime || (state.startTime && state.endTime))) },
+      { label: '사진', done: !!hasPhoto },
+      { label: '예약자', done: !!state.selectedEmployee },
+    ];
+    var html = '';
+    steps.forEach(function(s, i) {
+      html += '<div class="progress-step' + (s.done ? ' done' : '') + '">' +
+        '<span class="progress-dot">' + (s.done ? '✓' : (i + 1)) + '</span>' +
+        '<span class="progress-label">' + s.label + '</span></div>';
+      if (i < steps.length - 1) html += '<div class="progress-line' + (s.done ? ' done' : '') + '"></div>';
+    });
+    box.innerHTML = html;
+  }
+
+  function renderScannerCurrent() {
+    var box = el('scannerCurrent');
+    var s = state.selectedScanner ? findScanner(state.selectedScanner) : null;
+    el('changeScannerBtn').textContent = s ? '다른 스캐너 선택' : '스캐너 목록 보기';
+    if (!s) {
+      box.innerHTML = '<span style="color:var(--muted)">아래 "스캐너 목록 보기"를 눌러 고르시거나, 아래에서 사진을 찍으면 자동으로 찾아드립니다</span>';
+      return;
+    }
+    // 배지에 보여주는 글자/색깔은 "수령확인"을 눌렀는지와 상관없이 날짜로 정한
+    // display_status를 쓴다(2026-09-09 사장님 요청). 수령확인/반납 버튼이 뭘
+    // 보여줄지는 실제 상태(s.status)를 그대로 따르므로 안 바뀐다.
+    // (display_status는 새로 배포된 구글 Apps Script에만 있어서, 재배포 전에는
+    // 기존 status 값으로 대신한다 - 호환성.)
+    var ds = s.display_status || s.status;
+    // 지금 아무도 대여/예약 중이 아닌데 점검/수리중으로 표시돼 있으면, 배지 자체를
+    // "점검중"으로 보여준다(2026-09-10 사장님 요청 - "수리/점검 같은 현재 장비를
+    // 대여하지 못하는 상태로"). 이미 누가 대여/예약 중이면 그 정보가 더 급하므로
+    // 기존 배지를 그대로 보여주고, 점검 표시는 아래 안내문구로만 보여준다.
+    var showMaintenanceBadge = ds === 'available' && s.maintenance;
+    // 시간 단위 예약(2026-09-10 사장님 요청)이면 배지에도 시간까지 보여준다.
+    var timeSuffix = (s.start_time && s.end_time) ? (' (' + s.start_time + '~' + s.end_time + ')') : '';
+    var badgeClass = showMaintenanceBadge ? 'maintenance'
+        : ds === 'held' ? (s.overdue ? 'overdue' : 'held') : (ds === 'reserved' ? 'reserved' : 'available');
+    var badgeText = showMaintenanceBadge ? '🔧 점검/수리중'
+        : ds === 'held'
+        ? ('대여중: ' + s.holder + (s.expected_return ? (' · ~' + s.expected_return) : '') + timeSuffix + (s.overdue ? ' (기한 지남)' : ''))
+        : ds === 'reserved'
+        ? ('예약됨: ' + s.holder + ' · ' + s.start_date + '~' + s.expected_return + timeSuffix)
+        : '오늘은 사용가능';
+    box.innerHTML = '<div class="scanner-name">' + s.label +
+        ' <span class="model-tag" style="background:' + modelColor(s.model) + '">' + s.model + '</span> · ' + s.scanner_id + '</div>' +
+        '<span class="badge ' + badgeClass + '">' + badgeText + '</span>';
+    if (s.maintenance && s.maintenance_note) {
+      box.innerHTML += '<div class="maintenance-note">🔧 ' + s.maintenance_note + '</div>';
+    }
+    // 사용가능한 스캐너면, 지난번에 반납할 때 찍어둔 "보관 위치 사진"을 보여줘서
+    // 어디 가서 가져와야 하는지 바로 알 수 있게 한다(2026-09-09 사장님 요청 -
+    // "다음번에 대여하는 사람이 장비를 찾을 수 있게").
+    if (ds === 'available' && s.last_location_file_id) {
+      // 2026-09-16부터 "필요할 때만 불러오기" - 목록을 그릴 때 사진을 미리 다
+      // 불러오지 않고, 이 배지를 눌렀을 때만 그때 가져온다(사장님 확인).
+      box.innerHTML += '<div class="last-location">' +
+          '<div class="last-location-label">📍 지난번 보관 위치</div>' +
+          '<button type="button" class="last-location-photo last-location-btn">📷</button>' +
+          '</div>';
+      var thumb = box.querySelector('.last-location-btn');
+      var fileId = s.last_location_file_id;
+      thumb.onclick = function() {
+        thumb.disabled = true;
+        thumb.textContent = '…';
+        window.dsFetchScannerPhoto_(APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, fileId).then(function(dataUrl) {
+          thumb.disabled = false;
+          thumb.textContent = '📷';
+          showImageLightbox(dataUrl);
+        }).catch(function() {
+          thumb.disabled = false;
+          thumb.textContent = '📷';
+          showAlert('사진을 불러오지 못했어요. 다시 시도해주세요.');
+        });
+      };
+    }
+  }
+
+  function rangeBadgeHtml(s) {
+    // 점검/수리중이면 예약 가능 기간과 상관없이 그것부터 보여준다(2026-09-10
+    // 사장님 요청) - "이 기간 사용가능"이라고 나오면 오해할 수 있기 때문.
+    if (s.maintenance) return '<span class="sub">🔧 점검/수리중' + (s.maintenance_note ? (' · ' + s.maintenance_note) : '') + '</span>';
+    var c = s.range_conflict;
+    if (s.range_available || !c) return '<span class="sub">이 기간 사용가능</span>';
+    var mine = c.employee_name === state.selectedEmployee;
+    return '<span class="sub">' + (mine ? '내가 ' : (c.employee_name + '님이 ')) +
+        (c.status === '대여중' ? '대여중' : '예약함') + ' · ' + c.start_date + '~' + c.end_date + '</span>';
+  }
+
+  function renderScannerPicker() {
+    var box = el('scannerPicker');
+    box.innerHTML = '';
+    // PS C / PS 2를 먼저 그룹으로 나누고(2026-09-09 사장님 요청), 각 그룹 안에서는
+    // 이 기간에 사용가능한 스캐너를 위쪽에, 이미 예약/대여중인 스캐너는 아래로
+    // 내려서 보여준다(2026-09-08 사장님 요청).
+    ['PS C', 'PS 2'].forEach(function(model) {
+      var group = state.scanners.filter(function(s) { return s.model === model; });
+      if (!group.length) return;
+      var header = document.createElement('div');
+      header.className = 'model-group-label';
+      header.style.color = modelColor(model);
+      header.textContent = model;
+      box.appendChild(header);
+
+      var sorted = group.sort(function(a, b) {
+        var aOk = (a.range_available || !a.range_conflict) && !a.maintenance;
+        var bOk = (b.range_available || !b.range_conflict) && !b.maintenance;
+        if (aOk === bOk) return 0;
+        return aOk ? -1 : 1;
+      });
+      sorted.forEach(function(s) {
+        var btn = document.createElement('button');
+        btn.className = 'pick-btn' + (s.scanner_id === state.selectedScanner ? ' active' : '');
+        var active = s.scanner_id === state.selectedScanner;
+        btn.style.borderLeft = '4px solid ' + (active ? '#ffffff' : modelColor(s.model));
+        btn.innerHTML = s.label + ' · ' + s.scanner_id + rangeBadgeHtml(s);
+        btn.onclick = function() {
+          state.selectedScanner = s.scanner_id;
+          saveDraft_();
+          box.classList.add('hidden');
+          renderAll();
+          // 이미 찍어둔 시리얼 사진이 있는데 그게 지금 고른 이 스캐너 확인용이
+          // 아니었다면(예: 사진으로 자동 인식됐던 스캐너와 다른 걸 직접 고른 경우)
+          // 새로 고른 스캐너 기준으로 다시 확인한다 - 사진을 그대로 두고 스캐너만
+          // 바꿨는데 예전 확인 결과가 그대로 유효한 것처럼 보이면 안 되기 때문.
+          if (state.photos.serial && state.verifiedForScanner !== s.scanner_id) {
+            verifySerial();
+          }
+        };
+        box.appendChild(btn);
+      });
+    });
+  }
+
+  function serialOk() {
+    if (state.serialOverride) return true;
+    if (state.serialStatus === 'not_configured') return true;
+    // 'match' 상태여도 그게 "지금 고른 스캐너"에 대한 확인이 맞는지까지 확인한다 -
+    // 안전장치(위 verifiedForScanner 설명 참고).
+    return state.serialStatus === 'match' && state.verifiedForScanner === state.selectedScanner;
+  }
+
+  // ---- 4단계 사진 촬영(정면/옆면/전체/시리얼) ----
+  function renderPhotoCard() {
+    var active = activeReservationForSelectedScanner();
+    // 2026-09-08 사장님 요청 - "시리얼 사진을 안 찍고 장비 선택만으로도 대여할 수
+    // 있게": 사진 4장은 어느 경우든 필수가 아니라 항상 선택사항이다.
+    el('photoCard').classList.toggle('hidden', active && active.status === 'held');
+    el('photoCardLabel').textContent = active ? '📷 수령 확인 사진 (선택사항)' : '📷 장비 사진 (선택사항)';
+    renderPhotoStepper();
+  }
+
+  function renderPhotoStepper() {
+    var pillBox = el('photoStepper');
+    pillBox.innerHTML = PHOTO_STEPS.map(function(step, i) {
+      var done = !!state.photos[step.key];
+      var active = i === state.photoStepIndex;
+      return '<div class="photo-pill' + (done ? ' done' : '') + (active ? ' active' : '') + '" data-i="' + i + '">' +
+        '<span class="pill-icon">' + (done ? '✓' : (i + 1)) + '</span>' +
+        '<span class="pill-label">' + step.label + '</span></div>';
+    }).join('');
+    Array.prototype.forEach.call(pillBox.querySelectorAll('.photo-pill'), function(pill) {
+      pill.onclick = function() {
+        state.photoStepIndex = +pill.getAttribute('data-i');
+        renderPhotoStepper();
+      };
+    });
+
+    var step = PHOTO_STEPS[state.photoStepIndex];
+    var photo = state.photos[step.key];
+    var body = el('photoStepBody');
+    body.innerHTML =
+      '<div class="photo-step-title">' + step.title + '</div>' +
+      '<div class="photo-step-hint">' + step.hint + '</div>' +
+      '<div class="photo-row">' +
+        '<label class="photo-btn' + (photo ? ' done' : '') + '" for="photoInput">' +
+          (photo ? '✅ 다시 찍기' : '📷 촬영하기') + '</label>' +
+        '<img id="photoThumb" class="photo-thumb"' + (photo ? (' src="' + photo + '" style="display:inline-block"') : '') + '>' +
+      '</div>' +
+      '<div class="photo-step-links">' +
+        (state.photoStepIndex > 0 ? '<button type="button" id="photoPrevBtn">◀ 이전 단계</button>' : '') +
+        (step.key !== 'serial' ? '<button type="button" id="photoSkipBtn">이 사진 건너뛰기 ▶</button>' : '') +
+      '</div>';
+    if (el('photoPrevBtn')) {
+      el('photoPrevBtn').onclick = function() { state.photoStepIndex--; renderPhotoStepper(); };
+    }
+    if (el('photoSkipBtn')) {
+      el('photoSkipBtn').onclick = function() {
+        if (state.photoStepIndex < PHOTO_STEPS.length - 1) state.photoStepIndex++;
+        renderPhotoStepper();
+      };
+    }
+    renderProgressSteps();
+  }
+
+  // 2026-09-10 사장님 요청 - "이름만 입력하도록 해줘, 소속 및 연락처는 입력안해도
+  // 될거같아": 예약자 정보는 이름 하나만 받는다.
+  function buildNote() {
+    return el('noteInput').value.trim();
+  }
+
+  // Content-Type 헤더를 일부러 안 붙여야 브라우저가 "단순 요청"으로 보내서 사전
+  // 확인(preflight) 요청을 안 보내고, 구글 Apps Script와 CORS 오류 없이 통신할 수
+  // 있다(엑스스마트 프로 앱에서 이미 검증된 방식 - workflows/xsmart_error_app 참고).
+  function postJson(action, body) {
+    var payload = body || {};
+    payload.action = action;
+    payload.token = APPS_SCRIPT_TOKEN;
+    return fetch(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) })
+        .then(function(r) { return r.json(); });
+  }
+
+  function verifySerial() {
+    if (!state.selectedScanner) return;
+    state.serialStatus = 'checking';
+    state.serialOverride = false;
+    state.serialMsg = '확인 중...';
+    renderSerialStatus();
+    renderActionButtons();
+    postJson('verify_serial', {
+      scanner_id: state.selectedScanner,
+      employee_name: state.selectedEmployee,
+      photo_base64: state.photos.serial,
+    }).then(handleSerialResult).catch(function(err) {
+      state.serialAttempts++;
+      state.serialStatus = 'fail';
+      state.serialMsg = '확인에 실패했습니다: ' + err;
+      renderSerialStatus();
+      renderActionButtons();
+    });
+  }
+
+  function handleSerialResult(res) {
+    if (res.status === 'match') {
+      state.serialStatus = 'match'; state.serialAttempts = 0;
+      state.verifiedForScanner = state.selectedScanner;
+      state.serialMsg = '✅ 시리얼 번호 확인됨';
+    } else if (res.status === 'not_configured') {
+      // 이 스캐너는 아직 시트에 시리얼 번호가 등록 안 돼 있어서 확인 없이 통과된다는
+      // 뜻 - 예전엔 이 상태에서 메시지를 비워둬서(serialMsg='') 화면에 아무 표시도
+      // 없이 조용히 통과되는 바람에 "확인해서 맞다고 나온 줄 알았다"는 오해가 실제로
+      // 있었다(2026-09-08). 눈에 보이는 경고로 바꿈.
+      state.serialStatus = 'not_configured';
+      state.verifiedForScanner = state.selectedScanner;
+      state.serialMsg = '⚠️ 이 스캐너는 아직 시리얼 번호가 등록되지 않아 확인 없이 진행됩니다(관리자에게 등록 요청)';
+    } else if (res.status === 'mismatch') {
+      state.serialAttempts++; state.serialStatus = 'fail';
+      state.serialMsg = '❌ 시리얼 번호가 다릅니다' + (res.read_value ? ' (인식됨: ' + res.read_value + ')' : '') + ' · 다시 찍어주세요';
+    } else if (res.status === 'unreadable') {
+      state.serialAttempts++; state.serialStatus = 'fail';
+      state.serialMsg = '❌ 시리얼 번호를 읽지 못했습니다 · 더 가까이, 밝은 곳에서 다시 찍어주세요';
+    } else if (res.error === 'no_api_key') {
+      state.serialAttempts++; state.serialStatus = 'fail';
+      state.serialMsg = '❌ 시리얼 확인 기능이 아직 설정 전입니다(관리자에게 문의) · 계속하려면 아래 버튼';
+    } else {
+      state.serialAttempts++; state.serialStatus = 'fail';
+      state.serialMsg = '❌ 확인 중 문제가 발생했습니다: ' + (res.error || '알 수 없는 오류') + ' · 다시 찍어주세요';
+    }
+    renderSerialStatus();
+    renderActionButtons();
+  }
+
+  // 아직 스캐너를 고르지 않은 상태에서 시리얼 사진을 찍으면 이 경로로 온다 - 모든
+  // 스캐너의 시리얼 번호와 비교해서 어떤 스캐너인지 서버가 자동으로 찾아준다
+  // (2026-09-08 사장님 요청 - "시리얼 사진만 촬영해도 어떤 장비인지 바로 매칭").
+  // 찾으면 그 스캐너가 자동으로 선택되고 이미 확인된 것으로 처리된다.
+  function identifyScanner() {
+    state.serialStatus = 'checking';
+    state.serialOverride = false;
+    state.serialMsg = '사진으로 스캐너 찾는 중...';
+    renderSerialStatus();
+    renderActionButtons();
+    postJson('identify_serial', {
+      photo_base64: state.photos.serial,
+      employee_name: state.selectedEmployee,
+    }).then(handleIdentifyResult).catch(function(err) {
+      state.serialStatus = 'fail';
+      state.serialMsg = '확인에 실패했습니다: ' + err;
+      renderSerialStatus();
+      renderActionButtons();
+    });
+  }
+
+  function handleIdentifyResult(res) {
+    if (res.status === 'matched') {
+      state.selectedScanner = res.scanner_id;
+      state.verifiedForScanner = res.scanner_id;
+      state.serialStatus = 'match';
+      state.serialAttempts = 0;
+      state.serialMsg = '✅ 사진으로 자동 확인됨: ' + res.label + ' (' + res.model + ')';
+      saveDraft_();
+      // 이미 불러와둔 스캐너 목록 안에 이 스캐너 정보가 있으니 화면은 바로
+      // 갱신하고, 최신 상태 재확인(loadConfig)은 뒤에서 이어서 진행한다
+      // (2026-09-09 사장님 요청 - 클릭 이후 처리 속도).
+      renderAll();
+      loadConfig();
+      return;
+    }
+    if (res.status === 'no_match') {
+      state.serialStatus = 'fail';
+      state.serialMsg = '❌ 이 시리얼 번호와 일치하는 스캐너를 찾지 못했습니다' +
+          (res.read_value ? ' (인식됨: ' + res.read_value + ')' : '') + ' · 위에서 직접 선택해주세요';
+      el('scannerPicker').classList.remove('hidden');
+      renderScannerPicker();
+    } else if (res.status === 'ambiguous') {
+      state.serialStatus = 'fail';
+      state.serialMsg = '❌ 같은 시리얼 번호가 스캐너 여러 대(' + res.candidates.join(', ') +
+          ')에 등록되어 있습니다. 관리자에게 알려주세요';
+    } else if (res.status === 'unreadable') {
+      state.serialAttempts++; state.serialStatus = 'fail';
+      state.serialMsg = '❌ 시리얼 번호를 읽지 못했습니다 · 더 가까이, 밝은 곳에서 다시 찍어주세요';
+    } else if (res.error === 'no_api_key') {
+      state.serialAttempts++; state.serialStatus = 'fail';
+      state.serialMsg = '❌ 시리얼 확인 기능이 아직 설정 전입니다(관리자에게 문의) · 위에서 직접 선택해주세요';
+      el('scannerPicker').classList.remove('hidden');
+      renderScannerPicker();
+    } else {
+      state.serialAttempts++; state.serialStatus = 'fail';
+      state.serialMsg = '❌ 확인 중 문제가 발생했습니다: ' + (res.error || '알 수 없는 오류') + ' · 다시 찍어주세요';
+    }
+    renderSerialStatus();
+    renderActionButtons();
+  }
+
+  function renderSerialStatus() {
+    var box = el('serialStatus');
+    var overrideBtn = el('serialOverrideBtn');
+    if (!state.photos.serial || !state.serialMsg) {
+      box.classList.add('hidden');
+    } else {
+      box.classList.remove('hidden');
+      box.textContent = state.serialMsg;
+      box.className = 'serial-status ' +
+          (state.serialStatus === 'match' ? 'match' : state.serialStatus === 'checking' ? 'checking' : 'fail');
+    }
+    var showOverride = state.serialStatus === 'fail' && state.serialAttempts >= SERIAL_RETRY_LIMIT && !state.serialOverride;
+    overrideBtn.classList.toggle('hidden', !showOverride);
+  }
+
+  el('serialOverrideBtn').onclick = function() {
+    state.serialOverride = true;
+    state.serialMsg = '⚠️ 확인 없이 진행합니다(기록에 남습니다)';
+    renderSerialStatus();
+    renderActionButtons();
+  };
+
+  el('photoSkipAllBtn').onclick = function() {
+    // 예전엔 여기서 사진 단계만 1번으로 초기화하고 끝나서, 사장님 말씀대로
+    // "눌러도 안 넘어가지는" 것처럼 보였다(2026-09-09 버그 수정) - 이제는 사진
+    // 없이 바로 다음 칸(예약자 정보)으로 스크롤/포커스해서 눈에 보이게 넘어간다.
+    resetPhotoAndSerial();
+    renderPhotoCard();
+    el('employeeCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    el('employeeInput').focus();
+  };
+
+  function resetPhotoAndSerial() {
+    state.photos = { front: null, side: null, overall: null, serial: null };
+    state.photoStepIndex = 0;
+    state.serialStatus = null;
+    state.serialAttempts = 0;
+    state.serialOverride = false;
+    state.serialMsg = '';
+    state.verifiedForScanner = null;
+    el('photoInput').value = '';
+    renderSerialStatus();
+  }
+
+  el('changeScannerBtn').onclick = function() {
+    el('scannerPicker').classList.remove('hidden');
+    renderScannerPicker();
+  };
+
+  function showMsg(text, cls) {
+    var m = el('msg');
+    m.textContent = text;
+    m.className = 'msg ' + (cls || '');
+    // 처리 완료/실패 메시지를 놓치지 않도록 화면에 바로 보이게 스크롤한다(2026-09-08
+    // 사장님 요청 - "대여가 완료되면 대여되었다고 화면에 뜨도록").
+    if (text) m.scrollIntoView({behavior: 'smooth', block: 'center'});
+  }
+
+  function errorText(code) {
+    if (code === 'photo_required') return '사진을 먼저 촬영해주세요.';
+    if (code === 'missing_fields') return '이름, 스캐너, 대여 기간을 먼저 선택해주세요.';
+    if (code === 'bad_date_range') return '반납예정일이 시작일보다 빠를 수 없습니다.';
+    if (code === 'not_reserved') return '이미 처리된 예약입니다. 새로고침 후 다시 시도해주세요.';
+    if (code === 'already_returned') return '이미 반납(또는 취소)된 예약입니다.';
+    if (code === 'scanner_in_maintenance') return '이 장비는 지금 점검/수리중이라 대여할 수 없습니다.';
+    if (code === 'busy_try_again') return '다른 처리가 진행 중입니다. 잠시 후 다시 시도해주세요.';
+    if (code === 'bad_time_range') return '종료 시간이 시작 시간보다 늦어야 합니다.';
+    if (code === 'time_needs_single_day') return '시간 지정 예약은 하루 안에서만 가능합니다.';
+    return code || '알 수 없는 오류';
+  }
+
+  // ---- 메인 액션(예약하기/수령확인/반납) ----
+  function doMainAction() {
+    var active = activeReservationForSelectedScanner();
+    if (active && active.status === 'reserved') {
+      doConfirmPickup();
+    } else if (active && active.status === 'held') {
+      doReturn();
+    } else {
+      doReserve();
+    }
+  }
+
+  function doReserve() {
+    if (!state.selectedScanner || !state.selectedEmployee || !state.startDate || !state.endDate) {
+      showMsg(errorText('missing_fields'), 'error'); return;
+    }
+    // 시간 단위 예약(2026-09-10 사장님 요청) - 토글을 켰으면 시작/종료 시간이
+    // 둘 다 있어야 하고, 종료가 시작보다 늦어야 한다.
+    if (state.useTime) {
+      if (!state.startTime || !state.endTime) {
+        showMsg(errorText('missing_fields'), 'error'); return;
+      }
+      if (state.endTime <= state.startTime) {
+        showMsg(errorText('bad_time_range'), 'error'); return;
+      }
+    }
+    state.busy = true;
+    renderActionButtons();
+    // 사진이 있으면 구글 드라이브에 올리는 시간이 꽤 걸려서(2026-09-11 실제
+    // 확인 - 사진 여러 장이면 20~30초 가까이 걸릴 수 있음), 그냥 "처리 중"만
+    // 보여주면 멈춘 것처럼 보여서 불안해할 수 있다 - 미리 안내해준다.
+    var hasAnyPhoto = !!(state.photos.serial || state.photos.front || state.photos.side || state.photos.overall);
+    showMsg(hasAnyPhoto ? '처리 중입니다... 사진이 있어서 최대 30초 정도 걸릴 수 있어요.' : '처리 중입니다...', 'checking');
+    postJson('reserve', {
+      action: 'reserve',
+      scanner_id: state.selectedScanner,
+      employee_name: state.selectedEmployee,
+      start_date: state.startDate,
+      end_date: state.endDate,
+      start_time: state.useTime ? state.startTime : '',
+      end_time: state.useTime ? state.endTime : '',
+      photo_base64: state.photos.serial || '',
+      photo_front_base64: state.photos.front || '',
+      photo_side_base64: state.photos.side || '',
+      photo_overall_base64: state.photos.overall || '',
+      serial_check: state.serialOverride ? 'mismatch(수동진행)' : (state.serialStatus || ''),
+      note: buildNote(),
+    }).then(function(res) { handleActionResult('reserve', res); })
+      .catch(function(err) {
+        state.busy = false;
+        // 응답을 못 받았어도 실제로는 서버에서 처리됐을 수 있다(2026-09-11 실제
+        // 확인 - 사진이 있어서 응답이 오래 걸리다 연결이 끊겼는데, 실제 예약은
+        // 만들어지고 메일도 온 사례가 있었음). 무작정 "실패"만 보여주면 다시
+        // 눌러서 중복 예약을 만들 위험이 있으니, 최신 상태를 다시 확인해서
+        // 실제로 이미 처리됐는지부터 확인한다.
+        showMsg('응답을 받지 못했습니다. 실제로 처리됐는지 확인하는 중...', 'checking');
+        var checkScanner = state.selectedScanner, checkEmployee = state.selectedEmployee;
+        loadConfig().then(function() {
+          var s = findScanner(checkScanner);
+          if (s && s.status !== 'available' && s.holder === checkEmployee) {
+            showMsg('✅ 확인해보니 정상적으로 처리되어 있었습니다.', 'ok');
+            clearDraft_(); // 실제로는 성공했던 것이니 임시 저장해둔 정보도 정리한다.
+          } else {
+            showMsg('연결에 실패했습니다: ' + err, 'error');
+          }
+          renderActionButtons();
+        }).catch(function() {
+          showMsg('연결에 실패했습니다: ' + err, 'error');
+          renderActionButtons();
+        });
+      });
+  }
+
+  function doConfirmPickup() {
+    var active = activeReservationForSelectedScanner();
+    if (!active) return;
+    state.busy = true;
+    renderActionButtons();
+    var hasAnyPhoto = !!(state.photos.serial || state.photos.front || state.photos.side || state.photos.overall);
+    showMsg(hasAnyPhoto ? '처리 중입니다... 사진이 있어서 최대 30초 정도 걸릴 수 있어요.' : '처리 중입니다...', 'checking');
+    postJson('confirm_pickup', {
+      action: 'confirm_pickup',
+      reservation_id: active.reservation_id,
+      photo_base64: state.photos.serial || '',
+      photo_front_base64: state.photos.front || '',
+      photo_side_base64: state.photos.side || '',
+      photo_overall_base64: state.photos.overall || '',
+      serial_check: state.serialOverride ? 'mismatch(수동진행)' : (state.serialStatus || ''),
+      note: buildNote(),
+    }).then(function(res) { handleActionResult('confirm_pickup', res); })
+      .catch(function(err) { state.busy = false; showMsg('연결에 실패했습니다: ' + err, 'error'); renderActionButtons(); });
+  }
+
+  // 2026-09-09 사장님 요청 - "관리자 모드도 없애줘": 반납/취소도 이제 본인 확인
+  // 없이 누구나 할 수 있다. 그 예약의 원래 이름을 그대로 실어 보내서(관리자
+  // 비밀번호 없이도) 서버 쪽 검사를 통과시킨다.
+  function doReturn() {
+    var target = activeReservationForSelectedScanner();
+    if (!target) return;
+    state.busy = true;
+    renderActionButtons();
+    showMsg('처리 중입니다...', 'checking');
+    postJson('return', {
+      action: 'return',
+      reservation_id: target.reservation_id,
+      note: buildNote(),
+      employee_name: target.holder || '',
+    }).then(function(res) { handleActionResult('return', res); })
+      .catch(function(err) { state.busy = false; showMsg('연결에 실패했습니다: ' + err, 'error'); renderActionButtons(); });
+  }
+
+  function handleActionResult(type, res) {
+    state.busy = false;
+    if (res.status === 'ok') {
+      var label = type === 'reserve' ? (res.new_status === '대여중' ? '✅ 대여되었습니다' : '✅ 예약되었습니다')
+          : type === 'confirm_pickup' ? '✅ 수령 확인되어 대여중으로 바뀌었습니다'
+          : type === 'edit' ? '✅ 대여 기간이 수정되었습니다'
+          : '✅ 반납(예약취소) 처리되었습니다';
+      showMsg(label + ' · ' + res.timestamp, 'ok');
+      // 반납이 끝났을 때는 배너 문구뿐 아니라 화면 가운데에 잠깐 뜨는 팝업으로도
+      // 알려준다(2026-09-09 사장님 요청 - "반납이 완료되면... 화면 가운데에
+      // 팝업 알림이 나왔으면").
+      if (type === 'return') showSuccessToast('반납이 완료되었습니다');
+      // 대여/예약이 실제로 완료됐으니, 이어서 하기용으로 저장해뒀던 임시
+      // 정보는 더 이상 필요 없다(2026-09-11).
+      if (type === 'reserve') clearDraft_();
+      resetPhotoAndSerial();
+      el('noteInput').value = '';
+      state.editingDates = false;
+      // 처리 자체는 끝났으니 화면(버튼 등)은 바로 다시 눌러볼 수 있게 풀어준다 -
+      // 최신 상태 재확인(loadConfig)은 화면을 막지 않고 뒤에서 이어서 진행한다
+      // (2026-09-09 사장님 요청 - 완료 후 버튼이 몇 초간 굳어있던 문제 수정).
+      renderAll();
+      loadConfig();
+      return;
+    }
+    if (res.status === 'conflict') {
+      // 2026-09-10 사장님 요청 - "겹치면 그래도 진행하시겠습니까를 물어보면
+      // 안되지, 예약중이라 현재 해당 기간에 예약이 어렵습니다 라고 알려줘야지":
+      // 우회해서 진행할 방법 없이 그냥 막고 안내만 한다.
+      // 겹친 예약이 시간 단위면(2026-09-10 사장님 요청) 시간까지 같이 알려준다.
+      var conflictPeriod = res.conflict_start + '~' + res.conflict_end +
+          (res.conflict_start_time && res.conflict_end_time ? (' ' + res.conflict_start_time + '~' + res.conflict_end_time) : '');
+      showAlert('이미 ' + res.current_holder + '님이 ' + (res.conflict_status === '대여중' ? '대여중' : '예약') +
+          '인 기간과 겹쳐서 지금은 이 기간에 예약이 어렵습니다(' + conflictPeriod + ').',
+          { tone: 'warn' });
+      renderActionButtons();
+      return;
+    }
+    showMsg('처리하지 못했습니다: ' + errorText(res.error), 'error');
+    renderActionButtons();
+  }
+
+  // ---- 기간 수정 ---- (2026-09-09 사장님 요청 - 본인 확인 없이 누구나 할 수
+  // 있다. activeReservationForSelectedScanner()(이 스캐너에 지금 걸려있는
+  // 예약이면 누구든)를 대상으로 삼는다.
+  function updateEditTimeToggleVisibility_() {
+    var singleDay = el('editStartInput').value && el('editStartInput').value === el('editEndInput').value;
+    el('editTimeToggleLabel').classList.toggle('hidden', !singleDay);
+    if (!singleDay && el('editTimeToggleInput').checked) {
+      el('editTimeToggleInput').checked = false;
+      el('editTimeRow').classList.add('hidden');
+    }
+  }
+  function openEditPanel() {
+    var target = activeReservationForSelectedScanner();
+    if (!target) return;
+    state.editingDates = true;
+    el('editStartInput').value = target.start_date;
+    // 2026-09-09 사장님 요청으로 이미 대여중(가져간 뒤)이어도 시작일을 바꿀 수
+    // 있게 됨 - 예전엔 여기서 disabled 처리했었음.
+    el('editStartInput').disabled = false;
+    el('editEndInput').value = target.expected_return;
+    syncDateDisplay_('editStartInput', 'editStartDisplay');
+    syncDateDisplay_('editEndInput', 'editEndDisplay');
+    // 이 예약이 이미 시간 단위 예약이면(2026-09-10 사장님 요청) 수정칸도 그
+    // 상태로 미리 채워서 연다.
+    var hasTime = !!(target.start_time && target.end_time);
+    el('editTimeToggleInput').checked = hasTime;
+    el('editTimeRow').classList.toggle('hidden', !hasTime);
+    populateTimeSelects_('editStartTimeHour', 'editStartTimeMin');
+    populateTimeSelects_('editEndTimeHour', 'editEndTimeMin');
+    setTimeSelectValue_('editStartTimeHour', 'editStartTimeMin', target.start_time || '09:00');
+    setTimeSelectValue_('editEndTimeHour', 'editEndTimeMin', target.end_time || '10:00');
+    updateEditTimeToggleVisibility_();
+    el('editPanel').classList.remove('hidden');
+    el('editPanel').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  el('editStartInput').addEventListener('change', function() {
+    syncDateDisplay_('editStartInput', 'editStartDisplay');
+    updateEditTimeToggleVisibility_();
+  });
+  el('editEndInput').addEventListener('change', function() {
+    syncDateDisplay_('editEndInput', 'editEndDisplay');
+    updateEditTimeToggleVisibility_();
+  });
+  el('editStartDisplay').onclick = function() { openDatePicker_('editStartInput'); };
+  el('editEndDisplay').onclick = function() { openDatePicker_('editEndInput'); };
+  el('editTimeToggleInput').addEventListener('change', function(e) {
+    el('editTimeRow').classList.toggle('hidden', !e.target.checked);
+    if (e.target.checked) {
+      populateTimeSelects_('editStartTimeHour', 'editStartTimeMin');
+      populateTimeSelects_('editEndTimeHour', 'editEndTimeMin');
+      if (!el('editStartTimeHour').value) setTimeSelectValue_('editStartTimeHour', 'editStartTimeMin', '09:00');
+      if (!el('editEndTimeHour').value) setTimeSelectValue_('editEndTimeHour', 'editEndTimeMin', '10:00');
+    }
+  });
+  el('editCancelBtn').onclick = function() {
+    state.editingDates = false;
+    el('editPanel').classList.add('hidden');
+  };
+  function doSaveEdit() {
+    var target = activeReservationForSelectedScanner();
+    if (!target) return;
+    var useTime = el('editTimeToggleInput').checked;
+    var editStartTime = useTime ? getTimeSelectValue_('editStartTimeHour', 'editStartTimeMin') : '';
+    var editEndTime = useTime ? getTimeSelectValue_('editEndTimeHour', 'editEndTimeMin') : '';
+    if (useTime) {
+      if (!editStartTime || !editEndTime) { showMsg(errorText('missing_fields'), 'error'); return; }
+      if (editEndTime <= editStartTime) { showMsg(errorText('bad_time_range'), 'error'); return; }
+    }
+    state.busy = true;
+    renderActionButtons();
+    showMsg('수정 중입니다...', 'checking');
+    postJson('edit_reservation', {
+      action: 'edit_reservation',
+      reservation_id: target.reservation_id,
+      start_date: el('editStartInput').value,
+      end_date: el('editEndInput').value,
+      start_time: editStartTime,
+      end_time: editEndTime,
+      note: buildNote(),
+    }).then(function(res) { handleActionResult('edit', res); })
+      .catch(function(err) { state.busy = false; showMsg('연결에 실패했습니다: ' + err, 'error'); renderActionButtons(); });
+  }
+  el('editSaveBtn').onclick = function() { doSaveEdit(); };
+
+  function renderActionButtons() {
+    var box = el('actionButtons');
+    box.innerHTML = '';
+    // 이 스캐너에 지금 걸려있는 예약(누구든) - 2026-09-09 사장님 요청으로
+    // "관리자 모드"를 없애면서, 수령확인/반납/기간수정 모두 본인 확인 없이
+    // 이 예약을 처리할 수 있게 됨.
+    var active = activeReservationForSelectedScanner();
+    var baseReady = !!(state.selectedScanner && state.selectedEmployee) && !state.busy;
+
+    if (active && active.status === 'reserved') {
+      // 2026-09-08 사장님 요청으로 사진은 더 이상 필수가 아니다 - 장비를 이미
+      // 골라서 예약해둔 상태이므로 사진 없이도 수령 확인이 가능하다.
+      var pickupReady = baseReady;
+      box.appendChild(makeBtn(state.busy ? '처리 중...' : '수령 확인(대여 시작)', 'primary', !pickupReady, function() { doMainAction(); }));
+      box.appendChild(makeBtn('예약 취소', 'danger', state.busy, doReturn));
+      box.appendChild(makeBtn('기간 수정', 'secondary', state.busy, openEditPanel));
+    } else if (active && active.status === 'held') {
+      box.appendChild(makeBtn(state.busy ? '처리 중...' : '반납', 'primary', state.busy, doReturn));
+      box.appendChild(makeBtn('기간 수정', 'secondary', state.busy, openEditPanel));
+    } else {
+      // 점검/수리중으로 표시된 장비는 새로 대여/예약할 수 없다(2026-09-10 사장님
+      // 요청). 서버 쪽(createReservation_)에서도 똑같이 막아주지만, 화면에서도
+      // 미리 버튼을 막아서 헛수고로 눌러보는 일이 없게 한다.
+      var selected = state.selectedScanner ? findScanner(state.selectedScanner) : null;
+      var inMaintenance = !!(selected && selected.maintenance);
+      var isToday = state.startDate && state.startDate <= todayISO();
+      var timeOk = !state.useTime || !!(state.startTime && state.endTime && state.endTime > state.startTime);
+      var ready = baseReady && !!state.startDate && !!state.endDate && !inMaintenance && timeOk;
+      var label = inMaintenance ? '🔧 점검/수리중이라 대여할 수 없습니다'
+          : state.busy ? '처리 중...' : (isToday ? '지금 대여하기' : '예약하기');
+      box.appendChild(makeBtn(label, 'primary', !ready, function() { doMainAction(); }));
+    }
+    if (!active) {
+      el('editPanel').classList.add('hidden');
+      state.editingDates = false;
+    }
+    renderProgressSteps();
+  }
+
+  function makeBtn(text, cls, disabled, onclick) {
+    var b = document.createElement('button');
+    b.className = 'action-btn ' + cls;
+    b.textContent = text;
+    b.disabled = disabled;
+    b.onclick = onclick;
+    return b;
+  }
+
+  el('photoInput').addEventListener('change', function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var step = PHOTO_STEPS[state.photoStepIndex];
+    // 올리기 전에 적당한 크기로 줄인다(2026-09-11 - scanner-ui.js 참고, 원본
+    // 그대로 올리면 대여 처리가 느려지거나 실패로 보이는 문제가 있었음).
+    resizeImageForUpload_(file, function(dataUrl) {
+      state.photos[step.key] = dataUrl;
+      saveDraft_();
+      el('photoInput').value = '';
+      if (step.key === 'serial') {
+        state.verifiedForScanner = null;
+        renderPhotoStepper();
+        // 아직 스캐너를 안 골랐으면 사진으로 자동으로 찾고, 이미 골라뒀으면 그
+        // 스캐너와 일치하는지만 확인한다(2026-09-08).
+        if (state.selectedScanner) verifySerial(); else identifyScanner();
+      } else {
+        // 정면/옆면/전체 사진은 확인 절차 없이 바로 다음 단계로 넘어간다
+        // (2026-09-09 사장님 요청 - 촬영 단계를 안내).
+        if (state.photoStepIndex < PHOTO_STEPS.length - 1) state.photoStepIndex++;
+        renderPhotoStepper();
+      }
+    });
+  });
+
+  el('employeeInput').addEventListener('input', function(e) {
+    state.selectedEmployee = e.target.value.trim() || null;
+    renderActionButtons();
+  });
+  // 시간 지정 토글은 시작일=반납예정일(하루)일 때만 의미가 있다(2026-09-10
+  // 사장님 요청). 날짜 범위로 바뀌면 자동으로 꺼서, "여러 날짜인데 시간까지
+  // 지정된" 앞뒤가 안 맞는 상태가 안 생기게 한다.
+  function updateTimeToggleVisibility_() {
+    var singleDay = !!(state.startDate && state.endDate && state.startDate === state.endDate);
+    el('timeToggleLabel').classList.toggle('hidden', !singleDay);
+    if (!singleDay && state.useTime) {
+      state.useTime = false;
+      el('timeToggleInput').checked = false;
+      el('timeRow').classList.add('hidden');
+      state.startTime = ''; state.endTime = '';
+    }
+  }
+  el('startDateInput').addEventListener('change', function(e) {
+    state.startDate = e.target.value;
+    if (state.endDate && state.endDate < state.startDate) state.endDate = state.startDate;
+    el('endDateInput').value = state.endDate;
+    el('endDateInput').min = state.startDate;
+    syncDateDisplay_('startDateInput', 'startDateDisplay');
+    syncDateDisplay_('endDateInput', 'endDateDisplay');
+    updateTimeToggleVisibility_();
+    loadConfig();
+  });
+  el('endDateInput').addEventListener('change', function(e) {
+    state.endDate = e.target.value;
+    syncDateDisplay_('endDateInput', 'endDateDisplay');
+    updateTimeToggleVisibility_();
+    loadConfig();
+  });
+  el('startDateDisplay').onclick = function() { openDatePicker_('startDateInput'); };
+  el('endDateDisplay').onclick = function() { openDatePicker_('endDateInput'); };
+
+  el('timeToggleInput').addEventListener('change', function(e) {
+    state.useTime = e.target.checked;
+    el('timeRow').classList.toggle('hidden', !state.useTime);
+    if (state.useTime) {
+      // select는 항상 값이 있으므로 토글을 켜는 순간 바로 기본 시간(09:00~10:00)이
+      // 채워진 상태로 보인다 - 따로 시간을 골라야만 값이 생기는 게 아니다.
+      state.startTime = getTimeSelectValue_('startTimeHour', 'startTimeMin');
+      state.endTime = getTimeSelectValue_('endTimeHour', 'endTimeMin');
+    } else {
+      state.startTime = ''; state.endTime = '';
+    }
+    renderActionButtons();
+  });
+  ['startTimeHour', 'startTimeMin'].forEach(function(id) {
+    el(id).addEventListener('change', function() {
+      state.startTime = getTimeSelectValue_('startTimeHour', 'startTimeMin');
+      renderActionButtons();
+    });
+  });
+  ['endTimeHour', 'endTimeMin'].forEach(function(id) {
+    el(id).addEventListener('change', function() {
+      state.endTime = getTimeSelectValue_('endTimeHour', 'endTimeMin');
+      renderActionButtons();
+    });
+  });
+
+  function renderAll() {
+    renderScannerCurrent();
+    renderScannerPicker();
+    renderPhotoCard();
+    renderSerialStatus();
+    renderActionButtons();
+    renderProgressSteps();
+  }
+
+  // 달력에서 넘어왔든, QR/즐겨찾기로 바로 들어왔든 - 맨 처음 데이터를 다 받아오기
+  // 전까지만 전체화면 로딩 표시를 보여준다(그 뒤로 기간을 바꿔서 loadConfig가
+  // 다시 불릴 때는 기존 #rangeCheckingHint 문구로 충분함, 이미 화면을 보고
+  // 있는 중이라 전체를 다시 덮을 필요는 없음).
+  var firstConfigLoadDone = false;
+  function hidePageLoadingOverlay_() {
+    var overlay = el('pageLoadingOverlay');
+    if (!overlay) return;
+    overlay.classList.add('fade-out');
+    setTimeout(function() { overlay.classList.add('hidden'); }, 260);
+  }
+
+  // ---- 중간에 나간 예약 이어서 하기(2026-09-11 사장님 요청 - "예약할려다가...
+  // 중간에 그냥 강제로 나가는 경우가 많을거같아") ----
+  // 입력하던 내용(스캐너/이름/기간/사진 등)을 이 기기 브라우저에만 잠깐(localStorage)
+  // 저장해뒀다가, 나중에 다시 이 화면에 들어오면 "이어서 진행할지" 물어본다.
+  // 서버에는 전혀 안 남기는 임시 값이라(진짜 예약은 "대여하기"를 눌러야만 생김),
+  // 저장에 실패해도(용량 초과 등) 무시하고 그냥 넘어간다.
+  var DRAFT_KEY = 'dsScannerDraft';
+  var DRAFT_TTL_MS = 3 * 60 * 60 * 1000; // 3시간 넘게 지난 건 남 얘기일 가능성이 높아 그냥 지운다.
+
+  function saveDraft_() {
+    var hasContent = !!(state.selectedScanner || state.selectedEmployee ||
+        state.photos.front || state.photos.side || state.photos.overall || state.photos.serial);
+    if (!hasContent) { clearDraft_(); return; }
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        savedAt: Date.now(),
+        selectedScanner: state.selectedScanner,
+        selectedEmployee: state.selectedEmployee,
+        startDate: state.startDate,
+        endDate: state.endDate,
+        useTime: state.useTime,
+        startTime: state.startTime,
+        endTime: state.endTime,
+        note: el('noteInput').value,
+        photos: state.photos,
+        photoStepIndex: state.photoStepIndex,
+      }));
+    } catch (e) { /* 저장 공간 초과 등 - 임시 저장 기능이라 실패해도 무시 */ }
+  }
+  function clearDraft_() {
+    try { localStorage.removeItem(DRAFT_KEY); } catch (e) { /* 무시 */ }
+  }
+  function loadDraft_() {
+    try {
+      var raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return null;
+      var draft = JSON.parse(raw);
+      if (!draft || !draft.savedAt || (Date.now() - draft.savedAt) > DRAFT_TTL_MS) { clearDraft_(); return null; }
+      var p = draft.photos || {};
+      if (!draft.selectedScanner && !draft.selectedEmployee && !p.front && !p.side && !p.overall && !p.serial) return null;
+      return draft;
+    } catch (e) { return null; }
+  }
+  function applyDraft_(draft) {
+    state.selectedScanner = draft.selectedScanner || null;
+    state.selectedEmployee = draft.selectedEmployee || null;
+    state.startDate = draft.startDate || state.startDate;
+    state.endDate = draft.endDate || '';
+    state.useTime = !!draft.useTime;
+    state.startTime = draft.startTime || '';
+    state.endTime = draft.endTime || '';
+    state.photos = draft.photos || state.photos;
+    state.photoStepIndex = draft.photoStepIndex || 0;
+
+    el('startDateInput').value = state.startDate;
+    el('endDateInput').min = state.startDate;
+    el('endDateInput').value = state.endDate || '';
+    syncDateDisplay_('startDateInput', 'startDateDisplay');
+    syncDateDisplay_('endDateInput', 'endDateDisplay');
+    if (state.selectedEmployee) el('employeeInput').value = state.selectedEmployee;
+    el('noteInput').value = draft.note || '';
+    updateTimeToggleVisibility_();
+    if (state.useTime) {
+      el('timeToggleInput').checked = true;
+      el('timeRow').classList.remove('hidden');
+      setTimeSelectValue_('startTimeHour', 'startTimeMin', state.startTime || '09:00');
+      setTimeSelectValue_('endTimeHour', 'endTimeMin', state.endTime || '10:00');
+    }
+    renderPhotoStepper();
+    loadConfig();
+  }
+  // 처음 화면이 다 뜬 뒤(로딩 화면이 사라진 뒤)에만 물어본다 - 로딩 화면 위로
+  // 확인창을 띄우면 가려서 안 보이기 때문.
+  function checkDraft_() {
+    var draft = loadDraft_();
+    if (!draft) return;
+    var who = draft.selectedEmployee ? (draft.selectedEmployee + '님이 ') : '';
+    var what = draft.selectedScanner ? ('(' + draft.selectedScanner + ')') : '';
+    showConfirm(
+      who + '이전에 입력하시던 예약 정보' + what + '가 있습니다. 이어서 진행하시겠어요?',
+      function() { applyDraft_(draft); },
+      { okText: '이어서 진행', cancelText: '처음부터 시작', onCancel: function() { clearDraft_(); } }
+    );
+  }
+
+  function loadConfig() {
+    // 구글시트 쪽 응답이 몇 초 걸릴 수 있어서, 기다리는 동안 화면이 멈춘 것처럼
+    // 보이지 않도록 "확인 중" 표시를 띄운다(2026-09-09 사장님 요청 - 클릭 이후
+    // 처리 속도가 눈에 보이게).
+    el('rangeCheckingHint').classList.remove('hidden');
+    var q = '?action=config&token=' + APPS_SCRIPT_TOKEN +
+        '&start_date=' + encodeURIComponent(state.startDate || '') +
+        '&end_date=' + encodeURIComponent(state.endDate || '');
+    // fetch 체인을 그대로 리턴해서, 새로고침 버튼(scanner-ui.js의 dsRefresh_)이
+    // 다 끝날 때까지 기다렸다가 스핀 아이콘을 멈출 수 있게 한다(2026-09-11).
+    return fetch(APPS_SCRIPT_URL + q).then(function(r) { return r.json(); }).then(function(cfg) {
+      // 구글시트 쪽이 배포 직후 등 잠깐 불안정할 때 scanners가 없는 이상한
+      // 응답이 올 수 있다(2026-09-11 실제 확인) - 그대로 두면 뒤에서
+      // "TypeError: undefined..." 같은 알아보기 힘든 오류가 화면에 남는다.
+      // 여기서 먼저 걸러서 아래 catch의 안내 문구로 보낸다.
+      if (!cfg || !cfg.scanners) {
+        throw new Error(cfg && cfg.error ? cfg.error : 'bad_response');
+      }
+      // 2026-09-16 추가 - 점검모드면 목록은 무시하고 점검 안내만 보여준다.
+      if (window.dsCheckMaintenance_(cfg)) { el('rangeCheckingHint').classList.add('hidden'); return; }
+      state.scanners = cfg.scanners;
+      if (state.selectedScanner && !findScanner(state.selectedScanner)) state.selectedScanner = null;
+      // 목록은 항상 접어둔 채로 시작한다("스캐너 목록 보기"를 눌러야 펼쳐짐,
+      // 2026-09-08 사장님 요청) - renderAll() 안에서 renderScannerPicker()가
+      // 최신 목록/정렬로 다시 그려두므로, 펼칠 때는 그 내용이 바로 최신 상태.
+      renderAll();
+      maybeAutoOpenEdit();
+      el('rangeCheckingHint').classList.add('hidden');
+      if (!firstConfigLoadDone) { onFirstLoadDone_(); }
+    }).catch(function(err) {
+      showMsg('잠시 불러오지 못했습니다. 아래 새로고침(⟳) 버튼을 눌러 다시 시도해주세요.', 'error');
+      el('rangeCheckingHint').classList.add('hidden');
+      if (!firstConfigLoadDone) { onFirstLoadDone_(); }
+    });
+  }
+  // 로딩 화면(z-index가 더 높음) 위로 "이어서 하시겠어요?" 확인창을 띄우면 가려서
+  // 안 보이므로, 로딩 화면이 사라진 뒤에만 물어본다(2026-09-11).
+  function onFirstLoadDone_() {
+    firstConfigLoadDone = true;
+    hidePageLoadingOverlay_();
+    checkDraft_();
+  }
+
+  // 이름/특이사항/날짜/시간 칸은 종류가 많아서 하나하나 저장 호출을 붙이는 대신,
+  // 바뀔 때마다 공통으로 잠깐 저장해둔다(2026-09-11) - 스캐너 선택/사진 촬영처럼
+  // 버튼 클릭이나 콜백으로 바뀌는 값은 각자 자리에서 saveDraft_()를 직접 부른다.
+  document.addEventListener('input', function() { saveDraft_(); });
+  document.addEventListener('change', function() { saveDraft_(); });
+
+  el('startDateInput').min = todayISO();
+  el('startDateInput').value = state.startDate;
+  el('endDateInput').min = state.startDate;
+  if (state.endDate) el('endDateInput').value = state.endDate;
+  syncDateDisplay_('startDateInput', 'startDateDisplay');
+  syncDateDisplay_('endDateInput', 'endDateDisplay');
+  populateTimeSelects_('startTimeHour', 'startTimeMin');
+  populateTimeSelects_('endTimeHour', 'endTimeMin');
+  setTimeSelectValue_('startTimeHour', 'startTimeMin', '09:00');
+  setTimeSelectValue_('endTimeHour', 'endTimeMin', '10:00');
+  updateTimeToggleVisibility_();
+  // scanner-ui.js가 뒤로/앞으로 버튼 옆에 새로고침 버튼도 같이 넣어주도록,
+  // 이 값이 있으면 그 버튼을 눌렀을 때 이 함수를 부른다(2026-09-11 사장님
+  // 요청 - "새로고침을 할 수 있는 버튼을 만들어줘"). 이름/사진 등 이미 입력한
+  // 내용은 그대로 두고 스캐너 상태(사용가능 여부)만 다시 확인한다.
+  window.dsRefresh_ = loadConfig;
+  loadConfig();
+
+  // 달력에서 기간을 정해서 넘어온 경우, 다음으로 할 일인 "장비 사진" 카드로
+  // 자동 스크롤하고 잠깐 강조해준다(2026-09-09 사장님 요청).
+  if (qsFocus === 'photo') {
+    var focusTarget = el('photoCard');
+    if (focusTarget) {
+      focusTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      focusTarget.classList.add('highlight-pulse');
+      setTimeout(function() { focusTarget.classList.remove('highlight-pulse'); }, 2400);
+    }
+  }
+
+  // 달력에서 "이미 있는 예약 수정하기"를 누르고 넘어온 경우 - 2026-09-09 사장님
+  // 요청으로 기간 수정은 이제 본인 확인 없이 누구나 할 수 있어서, 이름을 입력할
+  // 필요 없이 스캐너 정보(config)만 불러와지면 바로 기간 수정 칸을 열어준다.
+  function maybeAutoOpenEdit() {
+    if (qsFocus !== 'edit' || state.editIntentDone) return;
+    var target = activeReservationForSelectedScanner();
+    if (!target) return;
+    state.editIntentDone = true;
+    openEditPanel();
+  }
+</script>
+</body>
+</html>
