@@ -53,7 +53,17 @@
     }
     @keyframes pageLoadingSpin { to { transform: rotate(360deg); } }
     .page-loading-text { font-size: 12.5px; color: var(--muted); font-weight: 600; }
-    .brand-header { display: flex; align-items: center; gap: 9px; margin: 4px 0 14px; }
+    .brand-header { display: flex; align-items: center; justify-content: space-between; gap: 9px; margin: 4px 0 14px; }
+    .brand-home { display: flex; align-items: center; gap: 9px; text-decoration: none; min-width: 0; }
+    .header-nav { display: flex; align-items: center; gap: 6px; flex: none; }
+    .nav-btn { display: inline-flex; align-items: center; height: 34px; padding: 0 12px; border-radius: 9px;
+               font-size: 13px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+    .nav-btn.primary { background: var(--navy); color: #fff; box-shadow: 0 2px 8px rgba(10,37,64,0.22); }
+    .nav-btn.secondary { background: var(--surface); color: var(--navy); border: 1px solid var(--border); }
+    .nav-btn:active { transform: scale(.97); }
+    /* 작은 폰(아이폰 SE/mini 등)에서는 버튼 두 개가 들어갈 자리가 모자라서 회사명
+       글자는 숨기고 DS 로고만 남긴다(로고를 눌러도 홈으로 가는 건 그대로). */
+    @media (max-width: 385px) { .brand-home .brand-text { display: none; } }
     .brand-mark {
       width: 28px; height: 28px; border-radius: 7px; background: var(--navy); color: #fff;
       display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 11.5px;
@@ -252,16 +262,21 @@
   <div class="page-loading-text">불러오는 중...</div>
 </div>
 
+<!-- 2026-09-29 사장님 요청 - 왼쪽 위 DS 로고(회사명 포함)를 누르면 홈(예약 달력)으로
+     가고, "예약 달력" 버튼은 밑줄 글자 대신 오른쪽 위에 눈에 띄는 버튼으로 둔다.
+     입력하던 내용은 임시저장(saveDraft_)돼 있어서 달력에 갔다 와도 이어서 할 수 있다. -->
 <div class="brand-header">
-  <span class="brand-mark">DS</span>
-  <div class="brand-text">
-    <span class="brand-name">Dentsply Sirona</span>
-    <span class="brand-sub">스캐너 대여현황</span>
+  <a class="brand-home" href="index.html" aria-label="홈(예약 달력)으로">
+    <span class="brand-mark">DS</span>
+    <div class="brand-text">
+      <span class="brand-name">Dentsply Sirona</span>
+      <span class="brand-sub">스캐너 대여현황</span>
+    </div>
+  </a>
+  <div class="header-nav">
+    <a class="nav-btn secondary" href="scanner_status.html">현황판</a>
+    <a class="nav-btn primary" href="index.html">📅 예약 달력</a>
   </div>
-</div>
-<div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin:-8px 0 12px;">
-  <a class="change-link" href="scanner_status.html" style="text-decoration:underline;">전체 현황판 보기</a>
-  <a class="change-link" href="index.html" style="text-decoration:underline;">예약 달력 보기</a>
 </div>
 
 <div class="progress-steps" id="progressSteps"></div>
