@@ -93,13 +93,14 @@
 <body>
 
 <div class="top">
-  <div class="brand">
+  <!-- 2026-09-29 사장님 요청 - DS 로고를 누르면 홈(예약 달력)으로 -->
+  <a class="brand" href="index.html" style="text-decoration:none;" aria-label="홈(예약 달력)으로">
     <span class="brand-mark">DS</span>
     <div class="brand-text">
       <span class="brand-name">Dentsply Sirona</span>
       <span class="brand-sub">쇼룸 스캐너 현황판</span>
     </div>
-  </div>
+  </a>
   <div style="display:flex; align-items:center; gap:10px;">
     <span class="updated" id="updatedAt">불러오는 중...</span>
     <button class="refresh-btn" id="refreshBtn" type="button">새로고침</button>
