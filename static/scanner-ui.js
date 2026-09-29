@@ -306,6 +306,67 @@
     });
   };
 
+  // 2026-09-29 사장님 요청 - "사이트 열리는 속도나 예약 속도가 많이 느린 것 같아".
+  // 화면 자체(깃허브)는 0.1초도 안 걸리는데, 구글 Apps Script에서 목록을 받아오는
+  // 데 3~20초가 걸린다(구글 서버가 잠들어 있다 깨어나는 시간 - 실측). 그래서 지난번에
+  // 받은 목록을 이 기기 브라우저에 기억해뒀다가, 다음에 열 때 그걸로 먼저 바로
+  // 그려주고 최신 목록은 뒤에서 받아와 조용히 바꿔치기한다. 기억해둔 목록은 화면
+  // 표시용일 뿐이라, 실제 예약/수정은 항상 구글 서버가 최신 상태로 겹침을 다시
+  // 확인하므로 잠깐 옛날 목록이 보여도 중복 예약이 생기지는 않는다.
+  var DS_CACHE_PREFIX = 'dsCache:';
+  var DS_CACHE_MAX_AGE_MS = 7 * 24 * 3600 * 1000; // 일주일 넘은 기억은 안 쓴다.
+  window.dsCacheGet_ = function (key) {
+    try {
+      var raw = localStorage.getItem(DS_CACHE_PREFIX + key);
+      if (!raw) return null;
+      var entry = JSON.parse(raw);
+      if (!entry || !entry.data || Date.now() - entry.t > DS_CACHE_MAX_AGE_MS) return null;
+      return entry.data;
+    } catch (e) {
+      return null; // 사생활 보호 모드 등으로 저장소를 못 쓰면 그냥 기억 없이 동작.
+    }
+  };
+  window.dsCacheSet_ = function (key, data) {
+    try {
+      localStorage.setItem(DS_CACHE_PREFIX + key, JSON.stringify({ t: Date.now(), data: data }));
+    } catch (e) { /* 저장 실패는 무시 - 다음에 조금 느리게 열릴 뿐 */ }
+  };
+
+  // 기억해둔 목록으로 먼저 보여주는 동안 화면 아래쪽에 작게 "최신 정보 확인 중"을
+  // 띄워서, 지금 보이는 게 몇 초 전 목록일 수 있다는 걸 알 수 있게 한다.
+  // state: 'syncing'(확인 중) / 'failed'(못 받아옴) / 그 외(숨김).
+  window.dsSyncPill_ = function (state) {
+    var pill = document.getElementById('ds-sync-pill');
+    if (state !== 'syncing' && state !== 'failed') {
+      if (pill) pill.remove();
+      return;
+    }
+    if (!document.getElementById('ds-sync-pill-style')) {
+      var st = document.createElement('style');
+      st.id = 'ds-sync-pill-style';
+      st.textContent =
+        '#ds-sync-pill { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);' +
+        '  z-index: 250; background: #0A2540; color: #fff; font-size: 13px; font-weight: 600;' +
+        '  padding: 8px 14px; border-radius: 999px; box-shadow: 0 4px 14px rgba(0,0,0,0.18);' +
+        '  display: flex; align-items: center; gap: 8px; pointer-events: none; }' +
+        '#ds-sync-pill.failed { background: #B42318; }' +
+        '#ds-sync-pill .ds-sync-dot { width: 8px; height: 8px; border-radius: 50%;' +
+        '  background: #EA7600; animation: dsSyncBlink 1s ease-in-out infinite; }' +
+        '#ds-sync-pill.failed .ds-sync-dot { display: none; }' +
+        '@keyframes dsSyncBlink { 0%,100% { opacity: .25; } 50% { opacity: 1; } }';
+      document.head.appendChild(st);
+    }
+    if (!pill) {
+      pill = document.createElement('div');
+      pill.id = 'ds-sync-pill';
+      document.body.appendChild(pill);
+    }
+    pill.className = state === 'failed' ? 'failed' : '';
+    pill.innerHTML = state === 'failed'
+      ? '최신 정보를 못 불러왔어요 · 새로고침(⟳)을 눌러주세요'
+      : '<span class="ds-sync-dot"></span>최신 정보 확인 중…';
+  };
+
   // 배포 중 잠깐 화면을 막던 옛 .scanner_maintenance 파일 방식을 대신한다 - 정적
   // 사이트는 서버가 없어 요청을 가로챌 수 없으므로, 화면이 매번 config를 부를
   // 때마다 받아오는 maintenance_mode 값을 보고 스스로 점검 안내를 띄운다. cfg는
