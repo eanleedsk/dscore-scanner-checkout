@@ -1417,7 +1417,9 @@
         throw new Error(cfg && cfg.error ? cfg.error : 'bad_response');
       }
       // 2026-09-16 추가 - 점검모드면 목록은 무시하고 점검 안내만 보여준다.
-      if (window.dsCheckMaintenance_(cfg)) { el('rangeCheckingHint').classList.add('hidden'); return; }
+      if (window.dsCheckMaintenance_(cfg)) { el('rangeCheckingHint').classList.add('hidden'); window.dsSyncPill_(null); return; }
+      window.dsCacheSet_('config', cfg);
+      window.dsSyncPill_(null);
       state.scanners = cfg.scanners;
       if (state.selectedScanner && !findScanner(state.selectedScanner)) state.selectedScanner = null;
       // 목록은 항상 접어둔 채로 시작한다("스캐너 목록 보기"를 눌러야 펼쳐짐,
@@ -1428,6 +1430,7 @@
       el('rangeCheckingHint').classList.add('hidden');
       if (!firstConfigLoadDone) { onFirstLoadDone_(); }
     }).catch(function(err) {
+      if (document.getElementById('ds-sync-pill')) window.dsSyncPill_('failed');
       showMsg('잠시 불러오지 못했습니다. 아래 새로고침(⟳) 버튼을 눌러 다시 시도해주세요.', 'error');
       el('rangeCheckingHint').classList.add('hidden');
       if (!firstConfigLoadDone) { onFirstLoadDone_(); }
@@ -1463,6 +1466,22 @@
   // 요청 - "새로고침을 할 수 있는 버튼을 만들어줘"). 이름/사진 등 이미 입력한
   // 내용은 그대로 두고 스캐너 상태(사용가능 여부)만 다시 확인한다.
   window.dsRefresh_ = loadConfig;
+  // 2026-09-29 사장님 요청 - "예약 속도가 느리다". 지난번에 받아둔 스캐너 목록이
+  // 있으면(scanner-ui.js의 dsCacheGet_) 구글 응답(3~20초)을 기다리지 않고 그걸로
+  // 먼저 화면을 띄워서 바로 사진 찍기 등을 시작할 수 있게 한다. 최신 목록은
+  // loadConfig()가 뒤에서 받아와 도착하면 다시 그린다. 실제 대여 버튼을 누르면
+  // 구글 서버가 그 시점의 최신 예약과 겹치는지 다시 확인하므로 안전하다.
+  (function renderConfigFromCacheFirst() {
+    var cached = window.dsCacheGet_ && window.dsCacheGet_('config');
+    if (!cached || !cached.scanners || cached.maintenance_mode) return;
+    try {
+      state.scanners = cached.scanners;
+      if (state.selectedScanner && !findScanner(state.selectedScanner)) state.selectedScanner = null;
+      renderAll();
+      window.dsSyncPill_('syncing');
+      onFirstLoadDone_();
+    } catch (e) { /* 기억해둔 내용이 이상하면 그냥 예전처럼 기다린다 */ }
+  })();
   loadConfig();
 
   // 달력에서 기간을 정해서 넘어온 경우, 다음으로 할 일인 "장비 사진" 카드로
