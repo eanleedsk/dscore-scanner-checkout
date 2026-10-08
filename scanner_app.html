@@ -1189,6 +1189,25 @@
   }
   el('editSaveBtn').onclick = function() { doSaveEdit(); };
 
+  // 2026-10-08 사장님 요청 - "반납을 하지 않아도 비어있는 날짜에는 예약이
+  // 가능하게 해줘". 지금 누가 쓰고 있거나(held)/이미 다른 예약이 잡혀있어도
+  // (reserved), 사용자가 고른 기간이 그 예약과 안 겹치면(서버가 계산해서
+  // 돌려주는 selected.range_available) 그 비어있는 기간만 따로 새 예약으로
+  // 잡을 수 있다 - 현재 쥐고 있는 사람과 상관없는 "다음 차례" 예약이므로
+  // 오늘 날짜로는 못 잡게 막는다(지금 당장은 실제로 그 장비를 가져올 수
+  // 없으므로 - 오늘 가져가려면 먼저 반납을 받아야 함). 실제 겹침 여부는
+  // 항상 서버(createReservation_)가 쓰는 시점에 다시 한번 확인하므로 이중으로
+  // 안전하다.
+  function appendFutureReserveButtonIfFree_(box, baseReady) {
+    var selected = state.selectedScanner ? findScanner(state.selectedScanner) : null;
+    if (!selected || selected.maintenance) return;
+    var hasFutureRange = !!(state.startDate && state.endDate && state.startDate > todayISO());
+    var timeOk = !state.useTime || !!(state.startTime && state.endTime && state.endTime > state.startTime);
+    if (!hasFutureRange || !timeOk || !selected.range_available) return;
+    var ready = baseReady && !state.busy;
+    box.appendChild(makeBtn(state.busy ? '처리 중...' : '이 기간으로 따로 예약하기', 'secondary', !ready, doReserve));
+  }
+
   function renderActionButtons() {
     var box = el('actionButtons');
     box.innerHTML = '';
@@ -1205,9 +1224,11 @@
       box.appendChild(makeBtn(state.busy ? '처리 중...' : '수령 확인(대여 시작)', 'primary', !pickupReady, function() { doMainAction(); }));
       box.appendChild(makeBtn('예약 취소', 'danger', state.busy, doReturn));
       box.appendChild(makeBtn('기간 수정', 'secondary', state.busy, openEditPanel));
+      appendFutureReserveButtonIfFree_(box, baseReady);
     } else if (active && active.status === 'held') {
       box.appendChild(makeBtn(state.busy ? '처리 중...' : '반납', 'primary', state.busy, doReturn));
       box.appendChild(makeBtn('기간 수정', 'secondary', state.busy, openEditPanel));
+      appendFutureReserveButtonIfFree_(box, baseReady);
     } else {
       // 점검/수리중으로 표시된 장비는 새로 대여/예약할 수 없다(2026-09-10 사장님
       // 요청). 서버 쪽(createReservation_)에서도 똑같이 막아주지만, 화면에서도
