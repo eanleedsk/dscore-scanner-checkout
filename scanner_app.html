@@ -140,14 +140,22 @@
       width: 100%; box-sizing: border-box; background: var(--surface); color: var(--text);
     }
     input.name-input:focus { outline: none; border-color: var(--brand); }
-    .date-display {
-      display: block; font-family: inherit; font-size: 14px; padding: 0 12px; height: 44px;
-      line-height: 42px; border-radius: 9px; border: 1.5px solid var(--border);
-      width: 100%; box-sizing: border-box; background: var(--surface); color: var(--text);
-      text-align: left; cursor: pointer;
+    /* 2026-10-08부터 날짜칸은 숨긴 input + 스타일만 입힌 버튼(showPicker() 호출)
+       조합을 버리고, 진짜 input[type=date]를 그대로 보여준다(사장님이 반복
+       신고 - "모바일에서 날짜 수정이 안 됨", 여러 번 재현 시도했지만 원인을 못
+       찾음). 시간칸을 네이티브 피커 대신 select 드롭다운으로 바꿨던 것과 같은
+       이유 - 기기별로 showPicker()가 안 먹는 경우가 있어서,아예 브라우저가
+       원래 갖고 있는 "입력칸을 직접 탭하면 자기가 알아서 피커를 띄우는" 동작에
+       기대는 쪽이 훨씬 안전하다. 완전히 똑같은 모양은 못 맞추지만(기기마다
+       네이티브 날짜 표시 방식이 다름), 적어도 항상 열리는 게 더 중요하다. */
+    input[type=date].date-display {
+      display: block; font-family: inherit; font-size: 14px; padding: 0 10px; height: 44px;
+      border-radius: 9px; border: 1.5px solid var(--border);
+      width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box;
+      background: var(--surface); color: var(--text);
+      text-align: left; -webkit-appearance: none; appearance: none;
     }
-    .date-display.empty { color: var(--muted); }
-    .date-display:active { border-color: var(--brand); }
+    input[type=date].date-display:focus { outline: none; border-color: var(--brand); }
     /* 시간 지정은 <input type="time">의 네이티브 피커(showPicker/포커스)에 기대지
        않고 시/분을 각각 고르는 드롭다운으로 만든다(2026-09-10 사장님 요청 -
        "시간 설정할때 시간이 나오지 않아" - 기기별로 네이티브 시간 피커가 안 뜨는
@@ -293,13 +301,11 @@
   <div class="date-row">
     <div class="date-field">
       <div class="field-label">시작일</div>
-      <button type="button" class="date-display" id="startDateDisplay"></button>
-      <input type="date" id="startDateInput" class="photo-input-hidden">
+      <input type="date" id="startDateInput" class="date-display">
     </div>
     <div class="date-field">
       <div class="field-label">반납예정일</div>
-      <button type="button" class="date-display" id="endDateDisplay"></button>
-      <input type="date" id="endDateInput" class="photo-input-hidden">
+      <input type="date" id="endDateInput" class="date-display">
     </div>
   </div>
   <!-- 날짜(하루~여러 날) 단위 예약뿐 아니라 시간 단위 예약도 지원한다(2026-09-10
@@ -357,13 +363,11 @@
     <div class="date-row">
       <div class="date-field">
         <div class="field-label">시작일</div>
-        <button type="button" class="date-display" id="editStartDisplay"></button>
-        <input type="date" id="editStartInput" class="photo-input-hidden">
+        <input type="date" id="editStartInput" class="date-display">
       </div>
       <div class="date-field">
         <div class="field-label">반납예정일</div>
-        <button type="button" class="date-display" id="editEndDisplay"></button>
-        <input type="date" id="editEndInput" class="photo-input-hidden">
+        <input type="date" id="editEndInput" class="date-display">
       </div>
     </div>
     <label class="time-toggle hidden" id="editTimeToggleLabel" for="editTimeToggleInput">
@@ -465,24 +469,34 @@
 
   function el(id) { return document.getElementById(id); }
 
-  // ---- 숨겨둔 진짜 <input type="date">를 대신해 보여주는 버튼(2026-09-10
-  // 사장님 요청 - 사파리에서 날짜칸이 카드 밖으로 튀어나오는 문제를 아예
-  // 날짜칸을 안 보이게 숨기는 방식으로 해결). 버튼 글자를 실제 값과 맞춰두고,
-  // 버튼을 누르면 숨겨둔 진짜 날짜칸의 달력을 띄운다. ----
+  // ---- 2026-10-08부터: 날짜칸은 숨긴 input + 스타일만 입힌 버튼(JS로
+  // showPicker() 호출) 조합을 버리고, 진짜 input[type=date]를 그대로 보여준다
+  // (사장님이 "모바일에서 날짜 수정이 안 됨"을 여러 번 신고 - 여러 각도로
+  // 재현을 시도했지만 원인을 못 찾음). 시간칸을 예전에 네이티브 피커 대신
+  // select 드롭다운으로 바꿨던 것과 같은 교훈 - 기기별로 showPicker()가 안
+  // 먹는 경우가 있어서, 브라우저가 원래 갖고 있는 "입력칸을 직접 탭하면
+  // 알아서 피커가 뜨는" 동작에 기대는 쪽이 훨씬 안전하다.
+  // 주의: 이 방식을 버린 원래 이유(2026-09-10)는 "사파리에서 날짜칸이 카드
+  // 밖으로 튀어나오는 문제"였다 - CSS에 min-width:0/max-width:100%를 넣어서
+  // 다시 안 튀어나오게 방어는 해뒀지만, 실제 아이폰에서 재확인이 필요하다.
+  // 아래 두 함수는 이제 할 일이 없지만(표시용 버튼 자체가 없어짐), 코드
+  // 여러 곳에 남아있는 호출부를 하나하나 다 지우는 대신 안전하게 아무 것도
+  // 안 하도록 남겨뒀다(표시용 버튼이 없으면 조용히 건너뜀).
   function formatDateDisplay_(iso) {
     if (!iso) return '날짜 선택';
     var p = iso.split('-');
     return p[0] + '. ' + (+p[1]) + '. ' + (+p[2]) + '.';
   }
   function syncDateDisplay_(inputId, displayId) {
-    var input = el(inputId), display = el(displayId);
+    var display = el(displayId);
+    if (!display) return;
+    var input = el(inputId);
     display.textContent = formatDateDisplay_(input.value);
     display.classList.toggle('empty', !input.value);
   }
-  // 날짜/시간 둘 다 같은 방식으로 열 수 있어서(showPicker는 input type과 상관없이
-  // 똑같이 동작) 이 함수 하나를 시간 버튼에도 그대로 재사용한다.
   function openDatePicker_(inputId) {
     var input = el(inputId);
+    if (!input) return;
     if (typeof input.showPicker === 'function') {
       try { input.showPicker(); return; } catch (e) { /* 아래 대체 방법으로 진행 */ }
     }
@@ -1134,8 +1148,8 @@
     syncDateDisplay_('editEndInput', 'editEndDisplay');
     updateEditTimeToggleVisibility_();
   });
-  el('editStartDisplay').onclick = function() { openDatePicker_('editStartInput'); };
-  el('editEndDisplay').onclick = function() { openDatePicker_('editEndInput'); };
+  // 2026-10-08부터 editStartInput/editEndInput이 직접 보이는 진짜 날짜칸이라
+  // (위 CSS 참고) 따로 열어주는 버튼이 필요 없다 - 그냥 탭하면 알아서 열린다.
   el('editTimeToggleInput').addEventListener('change', function(e) {
     el('editTimeRow').classList.toggle('hidden', !e.target.checked);
     if (e.target.checked) {
@@ -1281,8 +1295,8 @@
     updateTimeToggleVisibility_();
     loadConfig();
   });
-  el('startDateDisplay').onclick = function() { openDatePicker_('startDateInput'); };
-  el('endDateDisplay').onclick = function() { openDatePicker_('endDateInput'); };
+  // 2026-10-08부터 startDateInput/endDateInput이 직접 보이는 진짜 날짜칸이라
+  // (위 CSS 참고) 따로 열어주는 버튼이 필요 없다 - 그냥 탭하면 알아서 열린다.
 
   el('timeToggleInput').addEventListener('change', function(e) {
     state.useTime = e.target.checked;
