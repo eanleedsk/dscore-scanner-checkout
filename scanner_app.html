@@ -410,8 +410,10 @@
     location.replace('index.html');
   }
 
-  var MODEL_COLORS = { 'PS C': '#1E6FBF', 'PS 2': '#7A4FBF' };
-  function modelColor(model) { return MODEL_COLORS[model] || '#8B9698'; }
+  // 2026-10-08부터 "PS C"/"PS 2" 두 가지로 고정하지 않고, 시트에 실제로 있는
+  // 모델 값마다 자동으로 색을 배정한다(사장님 요청 - "PSC, PS2 말고 다른 항목도
+  // 만들 수 있게"). 도우미 함수는 scanner-ui.js에 공용으로 있음.
+  function modelColor(model) { return window.dsModelColor_(model, window.dsUniqueModels_(state.scanners)); }
   function todayISO() { return new Date().toISOString().split('T')[0]; }
   // 달력 화면(index.html)에서 시작일~종료일을 눌러 넘어온 경우
   // ?start_date=...&end_date=... 로 기간을 미리 채워준다(2026-09-09 사장님 요청).
@@ -629,10 +631,11 @@
   function renderScannerPicker() {
     var box = el('scannerPicker');
     box.innerHTML = '';
-    // PS C / PS 2를 먼저 그룹으로 나누고(2026-09-09 사장님 요청), 각 그룹 안에서는
-    // 이 기간에 사용가능한 스캐너를 위쪽에, 이미 예약/대여중인 스캐너는 아래로
-    // 내려서 보여준다(2026-09-08 사장님 요청).
-    ['PS C', 'PS 2'].forEach(function(model) {
+    // 모델별로 그룹을 나누고(2026-09-09 사장님 요청, 2026-10-08부터 PS C/PS 2
+    // 두 가지로 고정하지 않고 시트에 있는 모델 전부를 그룹으로 보여줌), 각 그룹
+    // 안에서는 이 기간에 사용가능한 스캐너를 위쪽에, 이미 예약/대여중인 스캐너는
+    // 아래로 내려서 보여준다(2026-09-08 사장님 요청).
+    window.dsUniqueModels_(state.scanners).forEach(function(model) {
       var group = state.scanners.filter(function(s) { return s.model === model; });
       if (!group.length) return;
       var header = document.createElement('div');
