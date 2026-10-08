@@ -465,7 +465,12 @@
         .then(function(r) { return r.json(); });
   }
 
-  var MODEL_COLORS = { 'PS C': '#1E6FBF', 'PS 2': '#7A4FBF' };
+  // 2026-10-08부터 "PS C"/"PS 2" 두 가지로 고정하지 않고, 시트에 실제로 있는
+  // 모델 값마다 자동으로 색을 배정한다(사장님 요청 - "PSC, PS2 말고 다른 항목도
+  // 만들 수 있게"). allModelsSeen은 render()에서 매번 최신 전체 모델 목록으로
+  // 갱신된다(도우미 함수는 scanner-ui.js에 공용으로 있음).
+  var allModelsSeen = [];
+  function modelColor(model) { return window.dsModelColor_(model, allModelsSeen); }
   var DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
   var MONTH_LABELS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
   var COL_W = 40, LABEL_W = 130, ROW_H = 46, HEAD_H = 50, DIVIDER_H = 24;
@@ -1283,7 +1288,7 @@
     showAlert('👆 스캐너 이름(예: 쇼룸 1번)을 누르면 큰 달력으로 더 편하게 예약할 수 있어요.\n\n' +
         '빈 칸(색이 없는 날짜)에서 시작일을 누르고, 이어서 종료일을 누르면 그 기간으로 바로 예약할 수도 있어요.\n\n' +
         '색이 칠해진 막대(이미 있는 예약)를 누르면 삭제할지 물어봐요.\n\n' +
-        'PS C / PS 2 구분줄을 누르면 그 그룹을 접었다 펼 수 있어요.');
+        '모델 이름이 적힌 구분줄을 누르면 그 그룹을 접었다 펼 수 있어요.');
   };
 
   function render(data) {
@@ -1314,11 +1319,15 @@
     scanners.forEach(function(s) {
       if (s.last_location_file_id) lastLocationByScanner[s.scanner_id] = s.last_location_file_id;
     });
-    // PS C 그룹을 먼저, PS 2 그룹을 그다음에 보여준다(2026-09-09 사장님 요청).
-    var modelOrder = { 'PS C': 0, 'PS 2': 1 };
+    // 모델 그룹끼리 순서대로 모아서 보여준다(2026-09-09 사장님 요청, 2026-10-08부터
+    // PS C/PS 2 두 가지로 고정하지 않고 시트에 있는 모델 전부를 그룹으로 보여줌 -
+    // 시트에 나오는 순서 그대로 그룹 순서를 정한다).
+    allModelsSeen = window.dsUniqueModels_(scanners);
+    var modelOrder = {};
+    allModelsSeen.forEach(function(m, i) { modelOrder[m] = i; });
     scanners.sort(function(a, b) {
-      var oa = modelOrder[a.model] !== undefined ? modelOrder[a.model] : 2;
-      var ob = modelOrder[b.model] !== undefined ? modelOrder[b.model] : 2;
+      var oa = modelOrder[a.model] !== undefined ? modelOrder[a.model] : 99;
+      var ob = modelOrder[b.model] !== undefined ? modelOrder[b.model] : 99;
       return oa - ob;
     });
     // 모델이 바뀌는 지점마다 구분 행(divider)을 끼워 넣은 행 목록을 만든다.
@@ -1427,7 +1436,7 @@
       var row = idx + 2;
 
       if (r.type === 'divider') {
-        var dBg = MODEL_COLORS[r.model] || '#8B9698';
+        var dBg = modelColor(r.model);
         var isCollapsed = !!collapsedGroups[r.model];
         // 구분줄(배경 띠 + 왼쪽 이름표)을 누르면 그 그룹을 접었다 펼 수 있다
         // (2026-09-10 사장님 요청). 둘 다 같은 동작이라 탭 영역이 넓다.
@@ -1455,7 +1464,7 @@
       }
 
       var s = r.data;
-      var labelBg = MODEL_COLORS[s.model] || '#8B9698';
+      var labelBg = modelColor(s.model);
       var label = document.createElement('div');
       label.className = 'label';
       label.setAttribute('data-row', row);
