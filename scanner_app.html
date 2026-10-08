@@ -208,6 +208,8 @@
 
     .hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
     .checking-hint { color: var(--brand); font-weight: bold; }
+    .ok-hint { color: #1E7B4D; font-weight: bold; }
+    .conflict-hint { color: #B5140A; font-weight: bold; }
     .serial-status { font-size: 12.5px; margin-top: 10px; font-weight: bold; }
     .serial-status.checking { color: var(--muted); }
     .serial-status.match { color: #127A5B; }
@@ -336,6 +338,7 @@
   </div>
   <div class="hint">시작일이 오늘이면 바로 대여, 미래 날짜면 예약만 됩니다. 위에서 스캐너를 고르면 그 기간에 쓸 수 있는지 표시됩니다.</div>
   <div class="hint checking-hint hidden" id="rangeCheckingHint">⏳ 이 기간에 쓸 수 있는지 확인 중...</div>
+  <div class="hint hidden" id="rangeResultHint"></div>
 </div>
 
 <div class="card" id="photoCard">
@@ -1345,8 +1348,41 @@
     });
   });
 
+  // 2026-10-08 사장님 요청 - "예약을 눌러야지만 겹친다고 뜨니까 불편하네":
+  // 기간을 바꿀 때마다(스캐너를 고르거나 날짜/시간을 바꿀 때마다 renderAll()이
+  // 다시 불리므로) 선택된 스캐너가 지금 고른 기간에 쓸 수 있는지를 바로
+  // 대여 기간 카드 안에 보여준다 - "예약" 버튼을 누르기 전에 미리 알 수 있다.
+  // 실제 겹침 여부는 항상 서버(createReservation_)가 쓰는 시점에 다시 한번
+  // 확인하므로, 여기는 미리 보여주는 용도일 뿐 최종 판단은 아니다.
+  function renderRangeResultHint_() {
+    var hint = el('rangeResultHint');
+    var s = state.selectedScanner ? findScanner(state.selectedScanner) : null;
+    if (!s || !state.startDate || !state.endDate) {
+      hint.classList.add('hidden');
+      return;
+    }
+    hint.classList.remove('hidden');
+    if (s.maintenance) {
+      hint.className = 'hint conflict-hint';
+      hint.textContent = '🔧 이 장비는 지금 점검/수리중이라 쓸 수 없습니다.';
+      return;
+    }
+    if (s.range_available || !s.range_conflict) {
+      hint.className = 'hint ok-hint';
+      hint.textContent = '✅ 이 기간에 사용 가능합니다.';
+      return;
+    }
+    var c = s.range_conflict;
+    var mine = c.employee_name === state.selectedEmployee;
+    var period = c.start_date + '~' + c.end_date;
+    hint.className = 'hint conflict-hint';
+    hint.textContent = '⚠️ ' + (mine ? '내가' : (c.employee_name + '님이')) + ' 이미 ' +
+        (c.status === '대여중' ? '대여중' : '예약') + '인 기간(' + period + ')과 겹칩니다.';
+  }
+
   function renderAll() {
     renderScannerCurrent();
+    renderRangeResultHint_();
     renderScannerPicker();
     renderPhotoCard();
     renderSerialStatus();
