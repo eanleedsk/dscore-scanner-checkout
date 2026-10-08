@@ -86,7 +86,11 @@
       display: flex; align-items: center; justify-content: center;
     }
     .month-nav .nav-arrow:active { background: var(--bg); }
-    .month-nav .month-label { font-size: 12.5px; font-weight: 700; color: var(--navy); padding: 0 6px; white-space: nowrap; }
+    .month-nav .month-label {
+      font-size: 12.5px; font-weight: 700; color: var(--navy); padding: 2px 6px; white-space: nowrap;
+      border: none; background: none; font-family: inherit; cursor: pointer; border-radius: 6px;
+    }
+    .month-nav .month-label:active { background: var(--bg); }
     .month-nav .today-btn {
       margin-left: 2px; border: none; background: var(--navy); color: #fff; font-weight: 700;
       font-size: 11.5px; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-family: inherit;
@@ -386,6 +390,19 @@
       padding: 14px; font-weight: bold; font-size: 15.5px; cursor: pointer; font-family: inherit;
     }
     .mp-confirm:disabled { background: #C9D0D1; }
+    /* 2026-10-08 추가 - 상단 "2026년 10월 ~ 11월" 표시를 눌러서 원하는 달로
+       바로 이동하는 팝업(사장님 요청 - "원하는 달력으로 바로 넘어가는 기능").
+       위의 날짜선택용 month-picker-overlay/mp-header 뼈대는 그대로 재사용하고,
+       안쪽 내용만 "날짜 하나하나"가 아니라 "달 이름" 버튼들로 간단하게 둔다. */
+    .mj-list { flex: 1; overflow-y: auto; padding: 4px 16px 20px; -webkit-overflow-scrolling: touch; }
+    .mj-year-title { font-weight: bold; font-size: 15px; margin: 18px 0 8px; color: var(--navy); }
+    .mj-month-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .mj-month-btn {
+      padding: 14px 0; border-radius: 10px; border: 1.5px solid var(--border); background: var(--surface);
+      font-family: inherit; font-size: 14px; font-weight: 700; color: var(--text); cursor: pointer;
+    }
+    .mj-month-btn:active { background: var(--bg); }
+    .mj-month-btn.mj-current { background: var(--brand); border-color: var(--brand); color: #fff; }
     .bar {
       position: relative; margin: 4px 2px; border-radius: 6px; font-size: 11px; font-weight: bold;
       color: #fff; display: flex; align-items: center; padding: 0 8px; overflow: visible;
@@ -451,7 +468,7 @@
   <div class="header-right">
     <div class="month-nav">
       <button id="prevBtn" class="nav-arrow" type="button" aria-label="이전달">‹</button>
-      <span class="month-label" id="monthTitle"></span>
+      <button type="button" class="month-label" id="monthTitle" aria-label="달 선택해서 바로 이동"></button>
       <button id="nextBtn" class="nav-arrow" type="button" aria-label="다음달">›</button>
       <button id="todayBtn" class="today-btn" type="button">오늘</button>
     </div>
@@ -878,6 +895,72 @@
     updateSummary();
     renderMonths();
   }
+
+  // 2026-10-08 추가 - 상단 "2026년 10월 ~ 11월" 표시를 누르면 "다음달" 버튼을
+  // 계속 누르지 않고도 원하는 달로 바로 이동할 수 있다(사장님 요청 - "원하는
+  // 달력으로 바로 넘어가는 기능으로 바꿔줘"). 지금 보는 달 기준 3개월 전부터
+  // 2027년 12월까지 달 이름 버튼을 보여주고, 누르면 그 달로 바로 넘어간다.
+  function openJumpToMonthPicker_() {
+    var overlay = document.createElement('div');
+    overlay.className = 'month-picker-overlay';
+    overlay.innerHTML =
+      '<div class="mp-header">' +
+        '<button class="mp-close" type="button">×</button>' +
+        '<div class="mp-title">달 선택</div>' +
+        '<div style="width:34px;"></div>' +
+      '</div>' +
+      '<div class="mj-list" id="mjList"></div>';
+    document.body.appendChild(overlay);
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { overlay.classList.add('mp-in'); });
+    });
+    function closeOverlay() {
+      overlay.classList.remove('mp-in');
+      setTimeout(function () {
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      }, 260);
+    }
+    dsOpenOverlay_(closeOverlay);
+    overlay.querySelector('.mp-close').onclick = dsCloseOverlay_;
+
+    var box = overlay.querySelector('#mjList');
+    var curY = viewMonth.getFullYear(), curM = viewMonth.getMonth();
+    var cursor = new Date(curY, curM - 3, 1);
+    var firstYear = true;
+    // cursor의 "해"가 2027년을 넘지 않는 동안 한 해씩 처리한다(해가 바뀌면
+    // 1월부터, 2027년도 끝까지 포함 - 공휴일 데이터가 거기까지만 있어서 그 이상은 안 둠).
+    while (cursor.getFullYear() <= 2027) {
+      var y = cursor.getFullYear();
+      var yearTitle = document.createElement('div');
+      yearTitle.className = 'mj-year-title';
+      yearTitle.textContent = y + '년';
+      box.appendChild(yearTitle);
+
+      var grid = document.createElement('div');
+      grid.className = 'mj-month-grid';
+      // 첫 해는 (지금 보는 달 기준) 3개월 전부터, 그다음 해부터는 1월부터 12월까지.
+      var startMonth = firstYear ? cursor.getMonth() : 0;
+      for (var m = startMonth; m <= 11; m++) {
+        (function(year, month) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'mj-month-btn' + (year === curY && month === curM ? ' mj-current' : '');
+          btn.textContent = (month + 1) + '월';
+          btn.onclick = function() {
+            viewMonth = new Date(year, month, 1);
+            extraDays = 0;
+            dsCloseOverlay_();
+            if (lastData) render(lastData); else load();
+          };
+          grid.appendChild(btn);
+        })(y, m);
+      }
+      box.appendChild(grid);
+      firstYear = false;
+      cursor = new Date(y + 1, 0, 1);
+    }
+  }
+  el('monthTitle').onclick = function() { openJumpToMonthPicker_(); };
 
   // 2026-10-08 추가 - "반납완료"로 끝난 예약은 평소엔 못 고치지만, 관리자
   // 암호를 맞게 입력하면 날짜를 바로잡을 수 있다(사장님 요청 - "반납완료된거는
