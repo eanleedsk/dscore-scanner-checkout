@@ -28,6 +28,7 @@
       --text: #0F1B2D; --muted: #64748B;
       --held: #4A7FD1; --held-bg: #E7EFFC;
       --reserved: #D99A34; --reserved-bg: #FBF0DC;
+      --returned: #5B9B6B; --returned-bg: #E8F3EA;
       --today: rgba(234,118,0,0.09);
       --holiday-tint: rgba(194,59,50,0.055);
       --maint: #7C5CBF; --maint-bg: #F1EAFB;
@@ -383,6 +384,10 @@
     }
     .bar.held { background: var(--held); }
     .bar.reserved { background: var(--reserved); }
+    /* 2026-10-08 추가 - 일찍 반납해도 달력에서 바로 사라지지 않고, 실제로 쓴
+       기간이 다른 색(완료 표시)으로 남아있는다(사장님 요청). 이미 끝난 일이라
+       옅게 처리하고, 손잡이/드래그/클릭 삭제가 전부 안 먹는 걸 커서로도 보여준다. */
+    .bar.returned { background: var(--returned); opacity: 0.8; cursor: default; }
     /* 막대 몸통을 끌어서 이동하는 동안(2026-09-11 사장님 요청) 지금 옮기고
        있다는 걸 눈에 띄게 보여준다. */
     .bar.bar-dragging { cursor: grabbing; opacity: 0.85; box-shadow: 0 3px 10px rgba(10,37,64,0.35); z-index: 4; }
@@ -554,7 +559,10 @@
   var lastLocationByScanner = {};
 
   function rangeAllFree(scannerId, start, end) {
-    var list = lastByScanner[scannerId] || [];
+    // 2026-10-08부터 lastByScanner에 "반납완료"(이미 끝난 예약, 달력 표시용으로만
+    // 최근 것 포함)도 같이 들어있다 - 비어있는지 판단할 땐 지금 실제로 막고 있는
+    // 예약(대여중/예약됨)만 봐야 하므로 반납완료는 빼고 계산한다.
+    var list = (lastByScanner[scannerId] || []).filter(function(x) { return x.status !== '반납완료'; });
     var cursor = parseISO(start);
     var endDate = parseISO(end);
     while (cursor <= endDate) {
@@ -707,10 +715,14 @@
     // (2026-09-11 사장님 요청).
     dsOpenOverlay_(closeOverlay);
 
-    // 그 날짜에 걸린 예약(있으면)을 돌려준다 - 없으면 빈 날짜.
+    // 그 날짜에 걸린 예약(있으면)을 돌려준다 - 없으면 빈 날짜. 2026-10-08부터
+    // "반납완료"(이미 끝난 예약)는 막는 용도에서 제외 - 실제로는 비어있는
+    // 날짜이므로 다시 고를 수 있어야 한다(달력 표시용으로만 최근 반납 건이
+    // 같이 들어있을 뿐).
     function reservationOn(iso) {
       var list = lastByScanner[scannerId] || [];
       for (var i = 0; i < list.length; i++) {
+        if (list[i].status === '반납완료') continue;
         if (iso >= list[i].start_date && iso <= list[i].end_date) return list[i];
       }
       return null;
@@ -1532,9 +1544,12 @@
       place(rowBg, row, 2, WINDOW_DAYS + 2);
 
       var myReservations = byScanner[s.scanner_id] || [];
+      // 2026-10-08부터 "반납완료"(이미 끝난 예약, 최근 것만 달력 표시용으로
+      // 같이 옴)는 더 이상 막는 예약이 아니므로, 빈 날짜 판단에서는 뺀다.
+      var myBlockingReservations = myReservations.filter(function(x) { return x.status !== '반납완료'; });
       function isDateFree(iso) {
-        for (var i = 0; i < myReservations.length; i++) {
-          if (iso >= myReservations[i].start_date && iso <= myReservations[i].end_date) return false;
+        for (var i = 0; i < myBlockingReservations.length; i++) {
+          if (iso >= myBlockingReservations[i].start_date && iso <= myBlockingReservations[i].end_date) return false;
         }
         return true;
       }
@@ -1566,8 +1581,9 @@
         var clipStart = Math.max(startIdx, 0);
         var clipEnd = Math.min(endIdx, WINDOW_DAYS - 1);
         if (clipStart > clipEnd) return; // 이 창(window) 밖 기간
+        var isReturned = res.status === '반납완료';
         var bar = document.createElement('div');
-        bar.className = 'bar ' + (res.status === '대여중' ? 'held' : 'reserved');
+        bar.className = 'bar ' + (res.status === '대여중' ? 'held' : isReturned ? 'returned' : 'reserved');
         // 막대가 짧으면 예약자명이 다 안 들어갈 수 있어서, 안쪽에 말줄임(ellipsis)
         // 전용 span으로 감싼다(2026-09-10 사장님 요청 - "막대 안에 예약자명이나
         // 부서명이 말줄임으로 보이게"). 막대 자체는 overflow:visible이라
@@ -1578,8 +1594,22 @@
         // 보여준다 - 막대 너비 자체는 그대로 하루짜리라, 시간 정보는 글자로만
         // 구분된다(사장님이 고른 "간단한" 방식).
         var timeTag = (res.start_time && res.end_time) ? (' ' + res.start_time + '~' + res.end_time) : '';
-        barLabel.textContent = res.employee_name + timeTag;
+        barLabel.textContent = (isReturned ? '✓ ' : '') + res.employee_name + timeTag;
         bar.appendChild(barLabel);
+        // 2026-10-08 추가 - 이미 반납 완료된 막대는 과거 기록일 뿐이라 눌러서
+        // 지우거나 끌어서 옮기는 동작을 전부 막는다(사장님 요청 - 일찍 반납해도
+        // 달력에 실제 쓴 기간이 "반납완료"로 그대로 남아있게).
+        if (isReturned) {
+          bar.title = res.employee_name + timeTag + ' · ' + res.start_date + ' ~ ' + res.end_date + ' (반납완료)';
+          place(bar, row, clipStart + 2, clipEnd + 3);
+          if (r.maxLanes > 1) {
+            var laneR = r.laneMap[res.reservation_id] || 0;
+            bar.style.alignSelf = 'start';
+            bar.style.height = (LANE_H - 4) + 'px';
+            bar.style.margin = (4 + laneR * LANE_H) + 'px 2px 0 2px';
+          }
+          return;
+        }
         bar.title = res.employee_name + timeTag + ' · ' + res.start_date + ' ~ ' + res.end_date + ' (' + res.status + ') · 눌러서 삭제 · 끌어서 이동';
         bar.style.cursor = 'grab';
         // 이미 있는 예약을 눌러서 바로 삭제(반납/취소)할지 물어본다(2026-09-09
