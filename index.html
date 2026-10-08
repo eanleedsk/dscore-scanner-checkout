@@ -734,7 +734,13 @@
       var cursor = new Date();
       cursor.setDate(1);
       cursor.setHours(0, 0, 0, 0);
-      for (var m = 0; m < 4; m++) {
+      // 2026-10-08 사장님 요청 - "다음달 넘기면서 날짜 선택할 때 12월도 건너뛰지
+      // 않고 27년도까지 계속 나오게". 고정 4개월 대신 지금부터 2027년 12월까지
+      // 전부 보여준다(그 이후는 공휴일 표시 데이터도 아직 없어서 최소 4개월만
+      // 보장하는 걸로 둠 - 2028년이 되면 이 기준도 같이 늘려줘야 한다).
+      var monthsUntilEnd2027 = (2027 - cursor.getFullYear()) * 12 + (12 - (cursor.getMonth() + 1)) + 1;
+      var totalMonths = Math.max(4, monthsUntilEnd2027);
+      for (var m = 0; m < totalMonths; m++) {
         var y = cursor.getFullYear(), mo = cursor.getMonth();
         var monthDiv = document.createElement('div');
         monthDiv.className = 'mp-month';
