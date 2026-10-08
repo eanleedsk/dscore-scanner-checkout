@@ -111,18 +111,33 @@
     }
     .guide-btn:active { background: var(--bg); }
 
+    /* 2026-10-08 - 장비명 칸을 가로 스크롤되는 달력(.gantt)과 완전히 분리된
+       별도 그리드(.gantt-labels)로 뗴어냈다(사장님 요청 - "옆으로 넘길때마다
+       좌측엔 해당 장비들이 고정되어서 보이게"). 원래는 .label에 position:sticky를
+       걸어서 고정해보려 했는데, 이 화면처럼 grid 안에서는 sticky가 자기가 속한
+       칸(그리드 셀) 경계를 못 벗어나서 실제로는 안 고정되는 문제가 있었다(브라우저
+       개발자도구로 직접 스크롤시켜 확인함 - CSS는 멀쩡해 보이는데 동작은 안 함).
+       그래서 아예 "진짜로 안 스크롤되는" 별도 영역으로 분리하는 더 확실한
+       방식으로 바꿨다. */
+    .gantt-outer {
+      display: flex; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden;
+    }
+    .gantt-labels {
+      display: grid; flex: none; border-right: 1px solid var(--border);
+      box-shadow: 2px 0 5px rgba(0,0,0,0.05); position: relative; z-index: 2;
+    }
     .gantt-wrap {
-      overflow-x: auto; background: var(--surface); border: 1px solid var(--border);
-      border-radius: 10px; -webkit-overflow-scrolling: touch;
+      flex: 1; min-width: 0; overflow-x: auto; -webkit-overflow-scrolling: touch;
     }
     .gantt {
       display: grid;
       position: relative;
     }
     .label {
-      position: sticky; left: 0; z-index: 3; background: var(--surface);
+      background: var(--surface);
       display: flex; flex-direction: column; justify-content: center;
-      padding: 0 10px; font-size: 12.5px; font-weight: 700; border-right: 1px solid var(--border);
+      padding: 0 10px; font-size: 12.5px; font-weight: 700;
       border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       color: var(--text); transition: background .12s ease;
     }
@@ -130,9 +145,17 @@
       font-weight: 500; color: var(--muted); font-size: 10.5px; margin-top: 1px;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
+    /* 지금 날짜를 고르는 중인 장비는 왼쪽 이름표를 다른 색으로 눈에 띄게
+       표시한다(2026-10-08 사장님 요청 - "클릭한 대여를 위해 날짜를 클릭한
+       장비는 색상이 다르게 표시"). row-hover(마우스 지나갈 때 살짝 밝아지는
+       효과)보다 뒤에 적어서, 둘이 겹쳐도 이 강조색이 이긴다. */
+    .label.label-picking {
+      background: rgba(234,118,0,0.16);
+      box-shadow: inset 0 0 0 1.5px var(--brand);
+    }
     .model-divider-band { cursor: pointer; }
     .model-divider-label {
-      position: sticky; left: 0; z-index: 3; cursor: pointer;
+      cursor: pointer;
       display: flex; align-items: center; gap: 6px; padding: 0 10px;
       color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .2px;
     }
@@ -143,8 +166,7 @@
     }
     .group-chevron.collapsed { transform: rotate(-90deg); }
     .corner {
-      position: sticky; left: 0; top: 0; z-index: 5; background: var(--surface);
-      border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+      background: var(--surface); border-bottom: 1px solid var(--border);
     }
     .date-head {
       position: sticky; top: 0; z-index: 4; background: var(--surface);
@@ -442,8 +464,11 @@
   </div>
 </header>
 
-<div class="gantt-wrap">
-  <div class="gantt" id="gantt"><div class="empty">불러오는 중...</div></div>
+<div class="gantt-outer" id="ganttOuter">
+  <div class="gantt-labels" id="ganttLabels"></div>
+  <div class="gantt-wrap">
+    <div class="gantt" id="gantt"><div class="empty">불러오는 중...</div></div>
+  </div>
 </div>
 
 <div class="bottom-links">
@@ -1500,22 +1525,37 @@
     });
 
     var gantt = el('gantt');
+    var ganttLabels = el('ganttLabels');
     gantt.innerHTML = '';
-    gantt.style.gridTemplateColumns = LABEL_W + 'px repeat(' + WINDOW_DAYS + ', ' + COL_W + 'px)';
-    gantt.style.gridTemplateRows = HEAD_H + 'px ' + rows.map(function(r) {
+    ganttLabels.innerHTML = '';
+    var rowHeightsStr = HEAD_H + 'px ' + rows.map(function(r) {
       return (r.type === 'divider' ? DIVIDER_H : r.rowH) + 'px';
     }).join(' ');
+    // 날짜 칸(.gantt)과 장비명 칸(.gantt-labels)은 이제 서로 다른 그리드라
+    // 가로 스크롤은 .gantt 쪽에만 걸리고 .gantt-labels는 아예 안 움직인다
+    // (2026-10-08). 두 그리드의 세로 줄 높이(gridTemplateRows)는 반드시
+    // 똑같이 맞춰줘야 행끼리 나란히 보인다.
+    gantt.style.gridTemplateColumns = 'repeat(' + WINDOW_DAYS + ', ' + COL_W + 'px)';
+    gantt.style.gridTemplateRows = rowHeightsStr;
+    ganttLabels.style.gridTemplateColumns = LABEL_W + 'px';
+    ganttLabels.style.gridTemplateRows = rowHeightsStr;
 
     function place(elm, row, colStart, colEnd) {
       elm.style.gridRow = row;
       elm.style.gridColumn = colStart + ' / ' + colEnd;
       gantt.appendChild(elm);
     }
+    // 장비명 칸 쪽(.gantt-labels)에 넣는 요소는 칼럼이 하나뿐이라 행 번호만 있으면 된다.
+    function placeLabel(elm, row) {
+      elm.style.gridRow = row;
+      elm.style.gridColumn = '1 / 2';
+      ganttLabels.appendChild(elm);
+    }
 
     // 모서리
     var corner = document.createElement('div');
     corner.className = 'corner';
-    place(corner, 1, 1, 2);
+    placeLabel(corner, 1);
 
     // 날짜 헤더 + 오늘 강조 배경(맨 뒤에 깔림)
     for (var i = 0; i < WINDOW_DAYS; i++) {
@@ -1531,7 +1571,7 @@
       if (holiday) head.title = holiday;
       head.innerHTML = (d.getMonth() + 1) + '/' + d.getDate() + '<b>' + DAY_LABELS[d.getDay()] + '</b>' +
           (holiday ? '<span class="holiday-name">' + holiday + '</span>' : '');
-      place(head, 1, i + 2, i + 3);
+      place(head, 1, i + 1, i + 2);
 
       // 오늘은 눈에 띄는 앰버 틴트로, 공휴일(오늘이 아닐 때)은 연한 붉은 음영으로
       // 그 날짜 칸 전체(장비 행 전부)를 구분해준다(2026-09-10 사장님 요청).
@@ -1539,12 +1579,12 @@
         var todayBg = document.createElement('div');
         todayBg.className = 'today-col';
         todayBg.setAttribute('data-col', i);
-        place(todayBg, '1 / ' + (rows.length + 2), i + 2, i + 3);
+        place(todayBg, '1 / ' + (rows.length + 2), i + 1, i + 2);
       } else if (holiday) {
         var holidayBg = document.createElement('div');
         holidayBg.className = 'holiday-col';
         holidayBg.setAttribute('data-col', i);
-        place(holidayBg, '1 / ' + (rows.length + 2), i + 2, i + 3);
+        place(holidayBg, '1 / ' + (rows.length + 2), i + 1, i + 2);
       }
     }
 
@@ -1568,7 +1608,7 @@
         band.className = 'model-divider-band';
         band.style.background = dBg + '26';
         band.onclick = toggleGroup;
-        place(band, row, 1, WINDOW_DAYS + 2);
+        place(band, row, 1, WINDOW_DAYS + 1);
 
         var lbl = document.createElement('div');
         lbl.className = 'model-divider-label';
@@ -1576,14 +1616,14 @@
         lbl.innerHTML = '<span class="group-chevron' + (isCollapsed ? ' collapsed' : '') + '">▾</span>' +
             '<span>' + r.model + '</span>';
         lbl.onclick = toggleGroup;
-        place(lbl, row, 1, 2);
+        placeLabel(lbl, row);
         return;
       }
 
       var s = r.data;
       var labelBg = modelColor(s.model);
       var label = document.createElement('div');
-      label.className = 'label';
+      label.className = 'label' + (pending.scannerId === s.scanner_id ? ' label-picking' : '');
       label.setAttribute('data-row', row);
       label.style.borderLeft = '4px solid ' + labelBg;
       label.innerHTML = s.label + '<span class="sub">' + s.scanner_id +
@@ -1602,12 +1642,12 @@
           openMonthPicker(scannerId, scannerLabel);
         };
       })(s.scanner_id, s.label, s.maintenance, s.maintenance_note);
-      place(label, row, 1, 2);
+      placeLabel(label, row);
 
       var rowBg = document.createElement('div');
       rowBg.className = 'row-bg';
       rowBg.setAttribute('data-row', row);
-      place(rowBg, row, 2, WINDOW_DAYS + 2);
+      place(rowBg, row, 1, WINDOW_DAYS + 1);
 
       var myReservations = byScanner[s.scanner_id] || [];
       // 2026-10-08부터 "반납완료"(이미 끝난 예약, 최근 것만 달력 표시용으로
@@ -1638,7 +1678,7 @@
             return function() { handleCellClick(scannerId, dateIso, scannerLabel); };
           })(s.scanner_id, cellIso, s.label);
         }
-        place(cell, row, day + 2, day + 3);
+        place(cell, row, day + 1, day + 2);
       }
 
       (byScanner[s.scanner_id] || []).forEach(function(res) {
@@ -1677,7 +1717,7 @@
           bar.onclick = (function(res) {
             return function() { openAdminEditReturned_(res); };
           })(res);
-          place(bar, row, clipStart + 2, clipEnd + 3);
+          place(bar, row, clipStart + 1, clipEnd + 2);
           if (r.maxLanes > 1) {
             var laneR = r.laneMap[res.reservation_id] || 0;
             bar.style.alignSelf = 'start';
@@ -1727,12 +1767,13 @@
           bar.style.margin = (4 + lane * LANE_H) + 'px 2px 0 2px';
         }
 
-        place(bar, row, clipStart + 2, clipEnd + 3);
+        place(bar, row, clipStart + 1, clipEnd + 2);
       });
     });
 
     if (!scanners.length) {
       gantt.innerHTML = '<div class="empty">스캐너 목록을 불러오는 중이거나 없습니다.</div>';
+      ganttLabels.innerHTML = '';
     }
   }
 
@@ -1812,6 +1853,7 @@
           window.dsSyncPill_('failed');
         } else {
           el('gantt').innerHTML = '<div class="empty">잠시 불러오지 못했습니다. 아래 새로고침(⟳) 버튼을 눌러 다시 시도해주세요.</div>';
+          el('ganttLabels').innerHTML = '';
         }
         if (!firstLoadDone) { firstLoadDone = true; hidePageLoadingOverlay_(); }
       });
@@ -1822,28 +1864,30 @@
   // gantt 안쪽 내용을 통째로 다시 그려도(innerHTML='') gantt 엘리먼트 자체는 그대로
   // 남아있으므로, 이 리스너는 한 번만 걸어두면 매번 다시 그려진 행에도 그대로
   // 적용된다(각 셀에 찍어둔 data-row 값으로 같은 행끼리 묶어서 켜고 끈다).
+  // 2026-10-08 - 장비명 칸이 .gantt-labels라는 별도 그리드로 분리되면서, 이름칸
+  // 쪽 호버도 같이 켜지게 두 그리드를 함께 감싸는 .gantt-outer에 리스너를 건다.
   (function setupRowHover() {
-    var gantt = el('gantt');
+    var outer = el('ganttOuter');
     var hoveredRow = null;
     function setHover(rowIdx) {
       if (rowIdx === hoveredRow) return;
       if (hoveredRow) {
-        Array.prototype.forEach.call(gantt.querySelectorAll('[data-row="' + hoveredRow + '"]'), function(elm) {
+        Array.prototype.forEach.call(outer.querySelectorAll('[data-row="' + hoveredRow + '"]'), function(elm) {
           elm.classList.remove('row-hover');
         });
       }
       hoveredRow = rowIdx;
       if (hoveredRow) {
-        Array.prototype.forEach.call(gantt.querySelectorAll('[data-row="' + hoveredRow + '"]'), function(elm) {
+        Array.prototype.forEach.call(outer.querySelectorAll('[data-row="' + hoveredRow + '"]'), function(elm) {
           elm.classList.add('row-hover');
         });
       }
     }
-    gantt.addEventListener('mousemove', function(e) {
+    outer.addEventListener('mousemove', function(e) {
       var t = e.target.closest ? e.target.closest('[data-row]') : null;
       setHover(t ? t.getAttribute('data-row') : null);
     });
-    gantt.addEventListener('mouseleave', function() { setHover(null); });
+    outer.addEventListener('mouseleave', function() { setHover(null); });
   })();
 
   // scanner-ui.js가 뒤로/앞으로 버튼 옆에 새로고침 버튼도 같이 넣어주도록,
