@@ -466,7 +466,7 @@
 
 <div class="gantt-outer" id="ganttOuter">
   <div class="gantt-labels" id="ganttLabels"></div>
-  <div class="gantt-wrap">
+  <div class="gantt-wrap" id="ganttWrap">
     <div class="gantt" id="gantt"><div class="empty">불러오는 중...</div></div>
   </div>
 </div>
@@ -567,6 +567,14 @@
   var pending = { scannerId: null, startIso: null };
   var lastData = null;
   var lastByScanner = {};
+  // 2026-10-08 추가 - 모바일에서 손가락으로 달력을 계속 옆으로 넘기면(화면 끝에
+  // 가까워지면) "다음달" 버튼을 따로 안 눌러도 이어서 더 먼 날짜가 나오게 한다
+  // (사장님 요청 - "11월30일에서 끝나... 27년의 매달도 옆으로 넘기면 나오게").
+  // extraDays만큼 이번 달 화면 끝(render의 monthEndDate)보다 더 늘려서 보여주고,
+  // 이전달/다음달/오늘 버튼을 누르면 그 달의 "자연스러운" 범위로 다시 시작하도록
+  // 0으로 되돌린다. 공휴일 데이터가 2027년까지만 있어서 그 이상은 안 늘어난다.
+  var extraDays = 0;
+  var HORIZON_END = new Date(2027, 11, 31);
   // PS C / PS 2 구분줄을 눌러서 그 그룹을 접었다 펼 수 있다(2026-09-10 사장님
   // 요청 - "섹션 헤더(토글 아코디언 기능 포함)"). 달을 옮기거나 새로고침해도
   // 접어둔 상태가 유지되도록 render() 밖(모듈 전역)에 기억해둔다.
@@ -1416,6 +1424,7 @@
     var targetIdx = viewMonth.getFullYear() * 12 + viewMonth.getMonth() + direction;
     if (targetIdx === curIdx + 1) targetIdx = direction > 0 ? curIdx + 2 : curIdx;
     viewMonth = new Date(Math.floor(targetIdx / 12), targetIdx % 12, 1);
+    extraDays = 0; // 다른 달로 이동하면 "그 달의 기본 범위"부터 다시 시작한다.
     if (lastData) render(lastData); else load();
   }
   el('prevBtn').onclick = function() { shiftMonth(-1); };
@@ -1423,6 +1432,7 @@
   el('todayBtn').onclick = function() {
     var now = new Date();
     viewMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    extraDays = 0;
     if (lastData) render(lastData); else load();
   };
   // 2026-09-10 사장님 요청 - 긴 안내 문구를 지우고 "?" 아이콘 하나로 숨겨둔다.
@@ -1450,7 +1460,12 @@
     // (shiftMonth 참고).
     var endMonthOffset = isCurrentMonth ? 2 : 1;
     var monthEndDate = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + endMonthOffset, 0);
-    WINDOW_DAYS = Math.round((monthEndDate - windowStart) / 86400000) + 1;
+    var naturalDays = Math.round((monthEndDate - windowStart) / 86400000) + 1;
+    // 2026-10-08 - 손가락으로 계속 옆으로 넘기면(scrollExtendIfNeeded_) extraDays가
+    // 늘어나서 "이번 달 끝"보다 더 먼 날짜까지 보여준다. 2027년 12월 31일까지만
+    // (공휴일 표시 데이터 한계) - 그 이상은 더 안 늘어난다.
+    var maxDays = Math.round((HORIZON_END - windowStart) / 86400000) + 1;
+    WINDOW_DAYS = Math.max(naturalDays, Math.min(maxDays, naturalDays + extraDays));
     el('monthTitle').textContent = viewMonth.getFullYear() + '년 ' + MONTH_LABELS[viewMonth.getMonth()] +
         (isCurrentMonth ? (' ~ ' + (monthEndDate.getFullYear() !== viewMonth.getFullYear() ? monthEndDate.getFullYear() + '년 ' : '') +
             MONTH_LABELS[monthEndDate.getMonth()]) : '');
@@ -1888,6 +1903,28 @@
       setHover(t ? t.getAttribute('data-row') : null);
     });
     outer.addEventListener('mouseleave', function() { setHover(null); });
+  })();
+
+  // 2026-10-08 추가 - 손가락으로 계속 옆으로 넘기다가 지금 그려둔 날짜의 끝
+  // 쪽에 가까워지면, "다음달" 버튼을 따로 안 눌러도 알아서 더 먼 날짜까지
+  // 이어서 보여준다(사장님 요청 - "11월30일에서 끝나... 옆으로 넘기면
+  // 나오게"). 이미 받아둔 예약 목록(lastData)을 다시 그리기만 하면 돼서
+  // 서버에 새로 물어볼 필요는 없다 - .gantt-wrap의 스크롤 위치는 안쪽 내용만
+  // 새로 그려도 그대로 유지된다.
+  (function setupInfiniteScroll() {
+    var wrap = el('ganttWrap');
+    var extending = false;
+    wrap.addEventListener('scroll', function() {
+      if (extending || !lastData) return;
+      var nearEnd = wrap.scrollLeft + wrap.clientWidth >= wrap.scrollWidth - COL_W * 6;
+      if (!nearEnd) return;
+      var maxDays = Math.round((HORIZON_END - windowStart) / 86400000) + 1;
+      if (WINDOW_DAYS >= maxDays) return; // 2027년 12월 31일까지 이미 다 보여준 상태
+      extending = true;
+      extraDays += 31;
+      render(lastData);
+      requestAnimationFrame(function() { extending = false; });
+    });
   })();
 
   // scanner-ui.js가 뒤로/앞으로 버튼 옆에 새로고침 버튼도 같이 넣어주도록,
