@@ -1205,7 +1205,7 @@
     var timeOk = !state.useTime || !!(state.startTime && state.endTime && state.endTime > state.startTime);
     if (!hasFutureRange || !timeOk || !selected.range_available) return;
     var ready = baseReady && !state.busy;
-    box.appendChild(makeBtn(state.busy ? '처리 중...' : '이 기간으로 따로 예약하기', 'secondary', !ready, doReserve));
+    box.appendChild(makeBtn(state.busy ? '처리 중...' : '예약하기', 'secondary', !ready, doReserve));
   }
 
   function renderActionButtons() {
