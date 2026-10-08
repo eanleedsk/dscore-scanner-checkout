@@ -35,6 +35,31 @@
     reader.readAsDataURL(file);
   };
 
+  // 2026-10-08 추가 - "PSC, PS2 말고 다른 항목도 만들 수 있게 해줘"(사장님 요청).
+  // 세 화면(대여/현황판/달력) 전부 예전엔 model 값이 딱 "PS C"/"PS 2" 둘뿐이라고
+  // 가정하고 그 두 글자만 그룹으로 보여줬었다 - 시트에 다른 모델명을 적어 넣은
+  // 장비는 화면에 아예 안 보이는 숨은 버그였음. 이제는 실제 데이터에 어떤 모델
+  // 값이 있든 전부 그룹으로 보여준다.
+  window.dsUniqueModels_ = function (items) {
+    var seen = {};
+    var list = [];
+    (items || []).forEach(function (s) {
+      if (s.model && !seen[s.model]) { seen[s.model] = true; list.push(s.model); }
+    });
+    return list;
+  };
+
+  // 모델마다 구분되는 색을 자동으로 붙여준다. 등장 순서가 아니라 모델 이름을
+  // 가나다/알파벳 순으로 정렬한 자리로 색을 고르기 때문에, 화면(대여/현황판/
+  // 달력)이 달라져도 같은 모델은 항상 같은 색으로 보인다. 색이 모자라면(모델이
+  // 팔레트보다 많아지면) 처음부터 다시 돌려씀.
+  var MODEL_COLOR_PALETTE = ['#1E6FBF', '#7A4FBF', '#0E8C7F', '#C9690B', '#B5476B', '#5B8C3A', '#4A5BC9', '#A05A2C'];
+  window.dsModelColor_ = function (model, allModels) {
+    var sorted = (allModels || []).slice().sort();
+    var idx = sorted.indexOf(model);
+    return idx === -1 ? '#8B9698' : MODEL_COLOR_PALETTE[idx % MODEL_COLOR_PALETTE.length];
+  };
+
   function ensureStyles() {
     if (document.getElementById('scanner-ui-style')) return;
     var style = document.createElement('style');
