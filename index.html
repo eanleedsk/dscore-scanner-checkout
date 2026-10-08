@@ -1114,7 +1114,6 @@
       // 다른 예약과 겹치는 쪽으로 끌어다 놓으면(2026-09-10 사장님 요청) 서버가
       // 'conflict'로 알려준다 - 우회 없이 그냥 막고 원래대로 되돌린 뒤 안내만 한다.
       function saveResize() {
-        barEl.dataset.justDragged = '1';
         barEl.textContent = '저장 중...';
         postJson_('edit_reservation', {
             reservation_id: res.reservation_id,
@@ -1146,6 +1145,18 @@
         });
       }
 
+      function updateBarVisualToOriginal() {
+        var s2 = Math.max(dayIndex(res.start_date, windowStart), 0);
+        var e2 = Math.min(dayIndex(res.end_date, windowStart), WINDOW_DAYS - 1);
+        barEl.style.gridColumn = (s2 + 2) + ' / ' + (e2 + 3);
+        barEl.textContent = origLabel;
+      }
+
+      // 2026-10-08 사장님 요청 - "다른 사람이 실수로 날짜를 변경할 수 있을거
+      // 같아" - 드래그가 끝나도 바로 저장하지 않고, 꼭 한 번 더 확인을 받는다.
+      // 실수로 스친 드래그는 여기서 취소/바깥 클릭/뒤로가기 아무거나로 막히고
+      // (전부 원래 자리로 되돌림), 진짜 바꾸려는 경우만 "변경" 버튼을 눌러
+      // 저장된다.
       function onUp() {
         document.removeEventListener('pointermove', onMove);
         document.removeEventListener('pointerup', onUp);
@@ -1153,13 +1164,16 @@
           barEl.textContent = origLabel; // 실제로 안 바뀌었으면 원래대로.
           return;
         }
-        saveResize();
-      }
-
-      function updateBarVisualToOriginal() {
-        var s2 = Math.max(dayIndex(res.start_date, windowStart), 0);
-        var e2 = Math.min(dayIndex(res.end_date, windowStart), WINDOW_DAYS - 1);
-        barEl.style.gridColumn = (s2 + 2) + ' / ' + (e2 + 3);
+        // 드래그 뒤에 이어지는 click 이벤트가 삭제 확인창을 띄우지 않도록, 확인창을
+        // 띄우기 전(=확실히 날짜가 바뀐 드래그로 확정된 시점)에 바로 표시해둔다 -
+        // saveResize() 안에서 나중에 표시하면 그땐 이미 click 이벤트가 지나간 뒤다.
+        barEl.dataset.justDragged = '1';
+        showConfirm(
+          res.employee_name + '님의 예약 기간을\n' + res.start_date + ' ~ ' + res.end_date +
+              ' → ' + curStart + ' ~ ' + curEnd + '\n으로 변경하시겠어요?',
+          function() { saveResize(); },
+          { okText: '변경', cancelText: '취소', onCancel: updateBarVisualToOriginal, onDismiss: updateBarVisualToOriginal }
+        );
       }
 
       document.addEventListener('pointermove', onMove);
@@ -1215,7 +1229,6 @@
       // 막음) 서버가 'conflict'로 알려준다 - 우회 없이 그냥 막고 원래 자리로
       // 되돌린 뒤 안내만 한다.
       function saveMove() {
-        barEl.dataset.justDragged = '1';
         barEl.textContent = '저장 중...';
         postJson_('edit_reservation', {
             reservation_id: res.reservation_id,
@@ -1246,6 +1259,10 @@
         });
       }
 
+      // 2026-10-08 사장님 요청 - "다른 사람이 실수로 날짜를 변경할 수 있을거
+      // 같아" - 드래그가 끝나도 바로 저장하지 않고, 꼭 한 번 더 확인을 받는다.
+      // 실수로 스친 드래그는 취소/바깥 클릭/뒤로가기 아무거나로 막히고(전부
+      // 원래 자리로 되돌림), 진짜 옮기려는 경우만 "이동" 버튼을 눌러 저장된다.
       function onUp() {
         document.removeEventListener('pointermove', onMove);
         document.removeEventListener('pointerup', onUp);
@@ -1253,7 +1270,16 @@
           if (moved) { barEl.classList.remove('bar-dragging'); updateBarVisualToOriginal(); }
           return; // 실제로 안 옮겨졌으면(클릭이었거나 제자리) 그대로 둔다.
         }
-        saveMove();
+        function revert() { barEl.classList.remove('bar-dragging'); updateBarVisualToOriginal(); }
+        // 드래그 뒤에 이어지는 click 이벤트가 삭제 확인창을 띄우지 않도록, 확인창을
+        // 띄우기 전(=확실히 날짜가 바뀐 드래그로 확정된 시점)에 바로 표시해둔다.
+        barEl.dataset.justDragged = '1';
+        showConfirm(
+          res.employee_name + '님의 예약을\n' + origStart + ' ~ ' + origEnd +
+              ' → ' + curStart + ' ~ ' + curEnd + '\n로 옮기시겠어요?',
+          function() { saveMove(); },
+          { okText: '이동', cancelText: '취소', onCancel: revert, onDismiss: revert }
+        );
       }
 
       document.addEventListener('pointermove', onMove);
