@@ -135,8 +135,12 @@
   var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzhUKOf5h55fg5-lGDKuS7N_6qGppE8okgRWj_BSgvjwTZzBE6ObN8zNJeqJokQZS7Z/exec';
   var APPS_SCRIPT_TOKEN = 'e15f4d1e8766c80d0f2979713a49b7fe';
 
-  var MODEL_COLORS = { 'PS C': '#1E6FBF', 'PS 2': '#7A4FBF' };
-  function modelColor(model) { return MODEL_COLORS[model] || '#8B9698'; }
+  // 2026-10-08부터 "PS C"/"PS 2" 두 가지로 고정하지 않고, 시트에 실제로 있는
+  // 모델 값마다 자동으로 색을 배정한다(사장님 요청 - "PSC, PS2 말고 다른 항목도
+  // 만들 수 있게"). allModelsSeen은 render()에서 매번 최신 전체 모델 목록으로
+  // 갱신된다(도우미 함수는 scanner-ui.js에 공용으로 있음).
+  var allModelsSeen = [];
+  function modelColor(model) { return window.dsModelColor_(model, allModelsSeen); }
   function el(id) { return document.getElementById(id); }
 
   function badgeInfo(s) {
@@ -170,12 +174,13 @@
       '</div>';
   }
 
-  // PS C / PS 2 순서로 그룹 나눠서 보여준다(2026-09-09 사장님 요청). list는 이미
-  // 원하는 우선순위(기한지남>대여중>예약됨, 또는 원래 시트 순서)로 정렬돼 있으므로
-  // 그 순서는 그대로 유지한 채 모델별로만 다시 묶는다.
+  // 모델별로 그룹 나눠서 보여준다(2026-09-09 사장님 요청, 2026-10-08부터 PS C/
+  // PS 2 두 가지로 고정하지 않고 시트에 있는 모델 전부를 그룹으로 보여줌). list는
+  // 이미 원하는 우선순위(기한지남>대여중>예약됨, 또는 원래 시트 순서)로 정렬돼
+  // 있으므로 그 순서는 그대로 유지한 채 모델별로만 다시 묶는다.
   function groupedHtml(list) {
     var out = '';
-    ['PS C', 'PS 2'].forEach(function(model) {
+    window.dsUniqueModels_(list).forEach(function(model) {
       var group = list.filter(function(s) { return s.model === model; });
       if (!group.length) return;
       out += '<div class="model-group-label" style="color:' + modelColor(model) + '">' + model + '</div>';
@@ -186,6 +191,7 @@
 
   function render(cfg) {
     var scanners = cfg.scanners || [];
+    allModelsSeen = window.dsUniqueModels_(scanners);
     // 아직 구글 Apps Script를 새 버전으로 재배포하기 전이라 display_status 값이
     // 없을 수도 있다 - 그럴 땐 기존 status 값으로 대신 채워서 화면이 깨지지
     // 않게 한다(2026-09-09, 재배포 전후 호환).
