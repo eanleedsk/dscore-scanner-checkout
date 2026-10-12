@@ -289,9 +289,21 @@
     box.addEventListener('click', dsCloseOverlay_);
   };
 
+  // 2026-10-12 추가 - "관리자 전용 링크"(사장님 요청: 점검모드(Y)로 막아놔도
+  // 관리자는 계속 예약·수정할 수 있게). 주소에 ?admin_key=...가 실려서 들어오면
+  // 기억해뒀다가, 이 사이트 안의 다른 화면으로 넘어갈 때도 계속 실어 보낸다 -
+  // 그래야 달력에서 대여화면으로 넘어가도 관리자 상태가 안 끊긴다. 화면 소스
+  // 코드 자체에는 이 값이 들어있지 않고, 링크로 실제로 받은 사람만 안다.
+  window.dsAdminKey_ = new URLSearchParams(location.search).get('admin_key') || '';
+  function dsWithAdminKey_(href) {
+    if (!window.dsAdminKey_ || /[?&]admin_key=/.test(href)) return href;
+    return href + (href.indexOf('?') === -1 ? '?' : '&') + 'admin_key=' + encodeURIComponent(window.dsAdminKey_);
+  }
+
   // 링크가 아니라 코드에서 직접 다음 화면으로 넘길 때(확인창 → 대여화면 등)도
   // 같은 방식으로 부드럽게 넘어가도록 쓰는 공용 함수.
   window.navigateWithFade = function (href) {
+    href = dsWithAdminKey_(href);
     document.body.style.transition = 'opacity .16s ease';
     document.body.style.opacity = '0';
     setTimeout(function () { window.location.href = href; }, 150);
@@ -310,6 +322,7 @@
     if (a.target && a.target !== '_self') return;
     if (a.hasAttribute('download')) return;
     e.preventDefault();
+    href = dsWithAdminKey_(href);
     document.body.style.transition = 'opacity .16s ease';
     document.body.style.opacity = '0';
     setTimeout(function () { window.location.href = href; }, 150);
