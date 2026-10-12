@@ -226,22 +226,6 @@
     .confirm-backdrop.cb-in .confirm-sheet { transform: translateY(0); opacity: 1; }
     .confirm-sheet h3 { margin: 0 0 8px; font-size: 17px; }
     .confirm-sheet p { margin: 0 0 16px; font-size: 13.5px; color: var(--muted); line-height: 1.5; }
-    /* 대여 확정 전에 지난번 보관 위치 사진을 미리 보여준다(2026-09-09 사장님
-       요청 - "대여할게요를 누르기 전에 화면에 현재 위치가 나올 수 있게"). */
-    .cs-location {
-      display: flex; align-items: center; gap: 10px; margin: -4px 0 16px;
-      padding: 8px 10px; background: var(--bg); border-radius: 10px;
-    }
-    .cs-location img {
-      width: 52px; height: 52px; border-radius: 8px; object-fit: cover;
-      border: 1.5px solid var(--border); flex: none; cursor: zoom-in;
-    }
-    .cs-location-loading {
-      width: 52px; height: 52px; border-radius: 8px; flex: none;
-      background: var(--border); font-size: 10px; color: var(--muted);
-      display: flex; align-items: center; justify-content: center; text-align: center;
-    }
-    .cs-location span { font-size: 12.5px; color: var(--muted); font-weight: bold; }
     .confirm-sheet .btn-row { display: flex; gap: 10px; }
     .confirm-sheet button {
       flex: 1; padding: 16px; border-radius: 10px; font-size: 15.5px; font-weight: bold;
@@ -283,8 +267,8 @@
       border-radius: 10px; border: 1.5px solid var(--border); font-family: inherit; padding: 0 12px;
     }
 
-    /* 반납 사진 2단계(장비/보관 위치) - 쏘카 어플의 차량 반납 사진 촬영 화면처럼
-       (2026-09-09 사장님 요청). "삭제하기" 확인 시트 안에서 내용만 바뀐다. */
+    /* 반납 사진 2단계(장비 전체/구성품, 2026-10-12) - "삭제하기" 확인 시트 안에서
+       내용만 바뀐다. */
     .photo-input-hidden { position: absolute; width: 1px; height: 1px; padding: 0;
       margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
     .rp-pills { display: flex; gap: 8px; margin-bottom: 14px; }
@@ -600,17 +584,6 @@
   // 요청 - "섹션 헤더(토글 아코디언 기능 포함)"). 달을 옮기거나 새로고침해도
   // 접어둔 상태가 유지되도록 render() 밖(모듈 전역)에 기억해둔다.
   var collapsedGroups = {};
-  // 스캐너별 "지난번 보관 위치 사진" - 대여 확인창(예, 대여할게요)에서 누르기
-  // 전에 미리 보여주기 위해 화면을 열 때 한 번만 받아서 기억해둔다(2026-09-09
-  // 사장님 요청 - "대여할게요를 누르기 전에 화면에 현재 위치가 나올 수 있게",
-  // "반응이 빠르게"). 누를 때마다 서버에 새로 물어보지 않아서 확인창이 바로 뜬다.
-  // 처음엔 예약 목록(reservations)과 따로 /scanner/api/config를 한 번 더 불러서
-  // 채웠었는데, 그러면 화면을 열자마자 빠르게 날짜를 눌렀을 때 그 응답이 아직 안
-  // 와서 사진이 안 보이는 문제가 있었다(2026-09-09 사장님 실사용 확인). 지금은
-  // 달력이 이미 받아오는 예약 목록 응답 안에 이 값도 같이 실려오도록 서버 쪽을
-  // 고쳐서(사장님 요청 - "미리... 사진을 찾고 있는건 어때? 더 빨리 찾아질거같은데"),
-  // 별도 요청/대기 없이 render()에서 한 번에 채워진다.
-  var lastLocationByScanner = {};
 
   function rangeAllFree(scannerId, start, end) {
     // 2026-10-08부터 lastByScanner에 "반납완료"(이미 끝난 예약, 달력 표시용으로만
@@ -670,27 +643,14 @@
     render(lastData);
   }
 
-  function csLocationHtml_() {
-    // 2026-09-16 - "필요할 때만 불러오기"로 바뀌면서, 이 자리엔 사진 대신 우선
-    // 불러오는 중 표시만 넣어두고 showConfirmSheet에서 실제 사진으로 바꿔친다.
-    return '<div class="cs-location"><div class="cs-location-loading">사진 불러오는 중…</div>' +
-        '<span>📍 지난번 보관 위치</span></div>';
-  }
-
   function showConfirmSheet(scannerId, scannerLabel, start, end) {
     var days = Math.round((parseISO(end) - parseISO(start)) / 86400000) + 1;
-    // 지난번에 반납하면서 찍어둔 보관 위치 사진이 있으면, 대여를 확정하기 전에
-    // 미리 보여줘서 어디 가서 가져와야 하는지 알 수 있게 한다(2026-09-09 사장님
-    // 요청). 2026-09-16부터는 이 값이 사진 자체가 아니라 드라이브 파일ID라
-    // ("필요할 때만 불러오기") 실제로 이 확인창을 열 때만 action=photo로 가져온다.
-    var locationFileId = lastLocationByScanner[scannerId];
     var backdrop = document.createElement('div');
     backdrop.className = 'confirm-backdrop';
     backdrop.innerHTML =
       '<div class="confirm-sheet">' +
         '<h3>' + scannerLabel + ' 대여</h3>' +
-        '<p>' + start + ' ~ ' + end + ' (총 ' + days + '일) 동안 대여하시겠어요?<br>확인하시면 시리얼 번호 사진 촬영으로 넘어갑니다.</p>' +
-        (locationFileId ? csLocationHtml_() : '') +
+        '<p>' + start + ' ~ ' + end + ' (총 ' + days + '일) 동안 대여하시겠어요?<br>확인하시면 사진 촬영 화면으로 넘어갑니다.</p>' +
         '<div class="btn-row">' +
           '<button class="cancel-btn" type="button">취소</button>' +
           '<button class="confirm-btn" type="button">예, 대여할게요</button>' +
@@ -698,21 +658,6 @@
       '</div>';
     document.body.appendChild(backdrop);
     openSheetAnim_(backdrop);
-    // 작은 썸네일이라 잘 안 보일 수 있으니, 누르면 화면 가득 크게 보여준다
-    // (2026-09-09 사장님 요청 - "사진을 클릭하면 사진이 확대 되게").
-    if (locationFileId) {
-      window.dsFetchScannerPhoto_(APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, locationFileId).then(function(dataUrl) {
-        var slot = backdrop.querySelector('.cs-location-loading');
-        if (!slot) return; // 그 사이 확인창이 닫혔으면 아무 것도 안 함.
-        slot.outerHTML = '<img src="' + dataUrl + '" alt="보관 위치 사진">';
-        backdrop.querySelector('.cs-location img').onclick = function() {
-          showImageLightbox(dataUrl);
-        };
-      }).catch(function() {
-        var slot = backdrop.querySelector('.cs-location-loading');
-        if (slot) slot.textContent = '사진을 불러오지 못했어요.';
-      });
-    }
     backdrop.querySelector('.cancel-btn').onclick = function() {
       dsCloseOverlay_();
     };
@@ -1153,9 +1098,8 @@
 
     backdrop.querySelector('.delete-btn').onclick = function() {
       // 실제로 가져간(대여중) 장비는 "반납하기"를 누르면 바로 지우지 않고,
-      // 쏘카 어플처럼 반납 사진(장비/보관 위치)부터 찍게 한다(2026-09-09
-      // 사장님 요청). 아직 안 가져간 예약(예약됨) 취소는 예전처럼 확인 없이
-      // 바로 처리한다.
+      // 반납 사진(장비 전체/구성품)부터 찍게 한다(2026-09-09 사장님 요청).
+      // 아직 안 가져간 예약(예약됨) 취소는 예전처럼 확인 없이 바로 처리한다.
       if (res.status === '대여중') {
         showReturnPhotoStep(scannerId, scannerLabel, res, barEl, backdrop);
         return;
@@ -1188,15 +1132,15 @@
     };
   }
 
-  // 반납 사진 2단계 - 쏘카 어플에서 차량 반납할 때 사진 찍는 것처럼, 장비 사진과
-  // 보관 위치 사진을 안내하며 찍게 한다(2026-09-09 사장님 요청 - "사무실 어디에
-  // 있는지 알 수 있으니까"). 기존 확인 시트(backdrop) 안의 내용만 바꿔서 보여준다.
+  // 반납 사진 2단계 - 장비 전체/구성품 순서로 안내하며 찍는다(2026-10-12 사장님
+  // 요청 - 대여 때와 같은 2단계로 통일, 보관 위치 사진은 더 이상 안 찍음). 기존
+  // 확인 시트(backdrop) 안의 내용만 바꿔서 보여준다.
   function showReturnPhotoStep(scannerId, scannerLabel, res, barEl, backdrop) {
     var STEPS = [
-      { key: 'equip', label: '장비', title: '① 장비 사진', hint: '반납하는 장비 전체가 잘 보이도록 찍어주세요.' },
-      { key: 'location', label: '위치', title: '② 보관 위치 사진', hint: '어디에 뒀는지 알아볼 수 있게 찍어주세요(쇼룸 진열대, 캐비닛 등).' },
+      { key: 'overall', label: '장비 전체', title: '① 장비 전체 사진', hint: '반납하는 장비 전체가 잘 보이도록 찍어주세요.' },
+      { key: 'parts', label: '구성품', title: '② 구성품 사진', hint: '케이블, 케이스 등 구성품이 보이도록 찍어주세요.' },
     ];
-    var photos = { equip: null, location: null };
+    var photos = { overall: null, parts: null };
     var stepIndex = 0;
     var sheet = backdrop.querySelector('.confirm-sheet');
     sheet.innerHTML =
@@ -1215,7 +1159,7 @@
 
     // 2026-09-09 사장님 요청 - "반납 사진은 선택사항이 아니라 필수로": 두 장
     // 다 찍기 전에는 "반납 완료" 버튼을 못 누르게 막는다.
-    function bothPhotosReady() { return !!photos.equip && !!photos.location; }
+    function bothPhotosReady() { return !!photos.overall && !!photos.parts; }
 
     function renderStep() {
       var pills = sheet.querySelector('#rpPills');
@@ -1262,10 +1206,10 @@
     });
 
     // rpDoneBtn(사진 다 찍고 반납)과 rpSkipBtn(사진 없이 바로 반납/취소) 둘 다
-    // 같은 반납 요청을 보내므로 공통 함수로 뺀다 - photoEquip/photoLocation을
+    // 같은 반납 요청을 보내므로 공통 함수로 뺀다 - photoOverall/photoParts를
     // 빈 값으로 부르면 사진 없이 반납된다(서버 쪽은 원래도 사진을 필수로 요구한
     // 적이 없음, 화면에서만 막고 있었음).
-    function doReturnRequest_(btn, busyText, doneText, photoEquip, photoLocation) {
+    function doReturnRequest_(btn, busyText, doneText, photoOverall, photoParts) {
       btn.disabled = true;
       var origText = btn.textContent;
       btn.textContent = busyText;
@@ -1273,8 +1217,8 @@
           reservation_id: res.reservation_id,
           scanner_id: scannerId,
           employee_name: res.employee_name,
-          photo_return_base64: photoEquip || '',
-          photo_location_base64: photoLocation || '',
+          photo_return_base64: photoOverall || '',
+          photo_return_parts_base64: photoParts || '',
         }).then(function(data) {
         if (data.status === 'ok') {
           dsCloseOverlay_();
@@ -1297,7 +1241,7 @@
     sheet.querySelector('#rpDoneBtn').onclick = function() {
       // 사진 업로드 때문에 시간이 좀 걸릴 수 있다고 미리 안내한다(2026-09-11 실제
       // 확인 - 사진 있으면 최대 30초 정도 걸릴 수 있음, 안내 없으면 멈춘 것처럼 보임).
-      doReturnRequest_(sheet.querySelector('#rpDoneBtn'), '반납 처리 중... (사진 업로드로 최대 30초 정도 걸릴 수 있어요)', '반납이 완료되었습니다', photos.equip, photos.location);
+      doReturnRequest_(sheet.querySelector('#rpDoneBtn'), '반납 처리 중... (사진 업로드로 최대 30초 정도 걸릴 수 있어요)', '반납이 완료되었습니다', photos.overall, photos.parts);
     };
     sheet.querySelector('#rpSkipBtn').onclick = function() {
       doReturnRequest_(sheet.querySelector('#rpSkipBtn'), '처리 중...', '반납(취소) 처리되었습니다', '', '');
@@ -1579,12 +1523,6 @@
         (isCurrentMonth ? (' ~ ' + (monthEndDate.getFullYear() !== viewMonth.getFullYear() ? monthEndDate.getFullYear() + '년 ' : '') +
             MONTH_LABELS[monthEndDate.getMonth()]) : '');
     var scanners = (data.scanners || []).slice();
-    // 대여 확인창에서 미리 보여줄 "지난번 보관 위치 사진" - 예약 목록과 같은 응답
-    // 안에 이미 같이 실려온다(2026-09-09 사장님 요청 - 별도로 안 기다리게).
-    lastLocationByScanner = {};
-    scanners.forEach(function(s) {
-      if (s.last_location_file_id) lastLocationByScanner[s.scanner_id] = s.last_location_file_id;
-    });
     // 모델 그룹끼리 순서대로 모아서 보여준다(2026-09-09 사장님 요청, 2026-10-08부터
     // PS C/PS 2 두 가지로 고정하지 않고 시트에 있는 모델 전부를 그룹으로 보여줌 -
     // 시트에 나오는 순서 그대로 그룹 순서를 정한다).
