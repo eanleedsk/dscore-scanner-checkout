@@ -177,7 +177,8 @@
     .note-input { font-family: inherit; font-size: 14px; padding: 10px 12px; border-radius: 9px;
                    border: 1.5px solid var(--border); width: 100%; box-sizing: border-box; resize: vertical; }
 
-    /* ---- 4단계 사진 촬영(정면/옆면/전체/시리얼, 2026-09-09 사장님 요청) ---- */
+    /* ---- 2단계 사진 촬영(장비 전체/구성품, 2026-10-12 사장님 요청 - "4단계는
+       복잡하니 전체/구성품 2장으로 간단하게") ---- */
     .photo-stepper { display: flex; gap: 6px; margin-bottom: 14px; }
     .photo-pill {
       flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
@@ -215,10 +216,6 @@
     .checking-hint { color: var(--brand); font-weight: bold; }
     .ok-hint { color: #1E7B4D; font-weight: bold; }
     .conflict-hint { color: #B5140A; font-weight: bold; }
-    .serial-status { font-size: 12.5px; margin-top: 10px; font-weight: bold; }
-    .serial-status.checking { color: var(--muted); }
-    .serial-status.match { color: #127A5B; }
-    .serial-status.fail { color: #B5140A; }
     .override-btn { display: block; margin-top: 8px; padding: 8px 12px; border-radius: 8px;
                     background: #FBE1E1; color: #B5140A; font-size: 12.5px; font-weight: bold; }
     button { border: none; cursor: pointer; font-family: inherit; }
@@ -351,8 +348,6 @@
   <div class="photo-stepper" id="photoStepper"></div>
   <div class="photo-step-body" id="photoStepBody"></div>
   <input type="file" id="photoInput" accept="image/*" capture="environment" class="photo-input-hidden">
-  <div id="serialStatus" class="serial-status hidden"></div>
-  <button class="override-btn hidden" id="serialOverrideBtn" type="button">그래도 진행하기</button>
   <button class="change-link photo-skip-all" id="photoSkipAllBtn" type="button">사진 없이 진행하기</button>
 </div>
 
@@ -438,14 +433,12 @@
   // 알려줬으면 좋겠어"). QR코드나 그냥 링크로 들어오면 이 값이 없어서 'web'.
   var requestSource = qsParams.get('via') === 'nfc' ? 'nfc' : 'web';
 
-  // 정면/옆면/전체/시리얼 순서로 4장을 안내하며 찍는다(2026-09-09 사장님 요청 -
-  // "야놀자/여기어때처럼 자세하게"). serial 단계만 기존처럼 제미나이로 자동
-  // 확인/스캐너 자동인식에 쓰이고, 나머지 3장은 장비 상태 기록용으로만 저장된다.
+  // 장비 전체/구성품 순서로 2장을 안내하며 찍는다(2026-10-12 사장님 요청 - "4단계는
+  // 복잡하니 전체/구성품 2장으로 간단하게". 이전의 시리얼 사진 자동인식 기능은
+  // 함께 없앴다 - 장비는 목록에서 직접 고른다).
   var PHOTO_STEPS = [
-    { key: 'front', label: '정면', title: '① 정면 사진', hint: '장비 정면 전체가 잘 보이도록 찍어주세요.' },
-    { key: 'side', label: '옆면', title: '② 옆면 사진', hint: '옆에서 케이블 연결 부분이 보이도록 찍어주세요.' },
-    { key: 'overall', label: '전체', title: '③ 전체 사진', hint: '스캐너 본체와 케이스 등 전체 구성이 보이도록 찍어주세요.' },
-    { key: 'serial', label: '시리얼', title: '④ 시리얼 번호 사진', hint: '시리얼 번호 스티커가 선명하게 보이도록 찍어주세요. 찍으면 자동으로 확인됩니다.' },
+    { key: 'overall', label: '장비 전체', title: '① 장비 전체 사진', hint: '장비 전체가 잘 보이도록 찍어주세요.' },
+    { key: 'parts', label: '구성품', title: '② 구성품 사진', hint: '케이블, 케이스 등 구성품이 보이도록 찍어주세요.' },
   ];
 
   var state = {
@@ -459,21 +452,11 @@
     useTime: false,
     startTime: '',
     endTime: '',
-    photos: { front: null, side: null, overall: null, serial: null },
+    photos: { overall: null, parts: null },
     photoStepIndex: 0,
-    serialStatus: null,
-    serialAttempts: 0,
-    serialOverride: false,
-    serialMsg: '',
-    // 지금 시리얼 사진이 실제로 "이 스캐너"라고 확인된 것인지 추적한다(2026-09-08).
-    // 예: A 스캐너 사진으로 확인된 뒤에 사람이 목록에서 B 스캐너를 다시 고르면,
-    // 이 값이 B와 달라지므로 serialOk()가 더 이상 통과시키지 않는다 - "다른 스캐너를
-    // 골라놓고 엉뚱한 스캐너 사진을 찍었는데 그대로 진행된" 사고를 막기 위한 안전장치.
-    verifiedForScanner: null,
     editingDates: false,
     busy: false,
   };
-  var SERIAL_RETRY_LIMIT = 3;
 
   function el(id) { return document.getElementById(id); }
 
@@ -559,7 +542,7 @@
 
   function renderProgressSteps() {
     var box = el('progressSteps');
-    var hasPhoto = state.photos.front || state.photos.side || state.photos.overall || state.photos.serial;
+    var hasPhoto = state.photos.overall || state.photos.parts;
     var steps = [
       { label: '장비', done: !!state.selectedScanner },
       { label: '기간', done: !!(state.startDate && state.endDate && (!state.useTime || (state.startTime && state.endTime))) },
@@ -611,32 +594,6 @@
     if (s.maintenance && s.maintenance_note) {
       box.innerHTML += '<div class="maintenance-note">🔧 ' + s.maintenance_note + '</div>';
     }
-    // 사용가능한 스캐너면, 지난번에 반납할 때 찍어둔 "보관 위치 사진"을 보여줘서
-    // 어디 가서 가져와야 하는지 바로 알 수 있게 한다(2026-09-09 사장님 요청 -
-    // "다음번에 대여하는 사람이 장비를 찾을 수 있게").
-    if (ds === 'available' && s.last_location_file_id) {
-      // 2026-09-16부터 "필요할 때만 불러오기" - 목록을 그릴 때 사진을 미리 다
-      // 불러오지 않고, 이 배지를 눌렀을 때만 그때 가져온다(사장님 확인).
-      box.innerHTML += '<div class="last-location">' +
-          '<div class="last-location-label">📍 지난번 보관 위치</div>' +
-          '<button type="button" class="last-location-photo last-location-btn">📷</button>' +
-          '</div>';
-      var thumb = box.querySelector('.last-location-btn');
-      var fileId = s.last_location_file_id;
-      thumb.onclick = function() {
-        thumb.disabled = true;
-        thumb.textContent = '…';
-        window.dsFetchScannerPhoto_(APPS_SCRIPT_URL, APPS_SCRIPT_TOKEN, fileId).then(function(dataUrl) {
-          thumb.disabled = false;
-          thumb.textContent = '📷';
-          showImageLightbox(dataUrl);
-        }).catch(function() {
-          thumb.disabled = false;
-          thumb.textContent = '📷';
-          showAlert('사진을 불러오지 못했어요. 다시 시도해주세요.');
-        });
-      };
-    }
   }
 
   function rangeBadgeHtml(s) {
@@ -683,32 +640,17 @@
           saveDraft_();
           box.classList.add('hidden');
           renderAll();
-          // 이미 찍어둔 시리얼 사진이 있는데 그게 지금 고른 이 스캐너 확인용이
-          // 아니었다면(예: 사진으로 자동 인식됐던 스캐너와 다른 걸 직접 고른 경우)
-          // 새로 고른 스캐너 기준으로 다시 확인한다 - 사진을 그대로 두고 스캐너만
-          // 바꿨는데 예전 확인 결과가 그대로 유효한 것처럼 보이면 안 되기 때문.
-          if (state.photos.serial && state.verifiedForScanner !== s.scanner_id) {
-            verifySerial();
-          }
         };
         box.appendChild(btn);
       });
     });
   }
 
-  function serialOk() {
-    if (state.serialOverride) return true;
-    if (state.serialStatus === 'not_configured') return true;
-    // 'match' 상태여도 그게 "지금 고른 스캐너"에 대한 확인이 맞는지까지 확인한다 -
-    // 안전장치(위 verifiedForScanner 설명 참고).
-    return state.serialStatus === 'match' && state.verifiedForScanner === state.selectedScanner;
-  }
-
-  // ---- 4단계 사진 촬영(정면/옆면/전체/시리얼) ----
+  // ---- 2단계 사진 촬영(장비 전체/구성품) ----
   function renderPhotoCard() {
     var active = activeReservationForSelectedScanner();
-    // 2026-09-08 사장님 요청 - "시리얼 사진을 안 찍고 장비 선택만으로도 대여할 수
-    // 있게": 사진 4장은 어느 경우든 필수가 아니라 항상 선택사항이다.
+    // 2026-09-08 사장님 요청 - "장비 선택만으로도 대여할 수 있게": 사진은 어느
+    // 경우든 필수가 아니라 항상 선택사항이다.
     el('photoCard').classList.toggle('hidden', active && active.status === 'held');
     el('photoCardLabel').textContent = active ? '📷 수령 확인 사진 (선택사항)' : '📷 장비 사진 (선택사항)';
     renderPhotoStepper();
@@ -743,7 +685,7 @@
       '</div>' +
       '<div class="photo-step-links">' +
         (state.photoStepIndex > 0 ? '<button type="button" id="photoPrevBtn">◀ 이전 단계</button>' : '') +
-        (step.key !== 'serial' ? '<button type="button" id="photoSkipBtn">이 사진 건너뛰기 ▶</button>' : '') +
+        (state.photoStepIndex < PHOTO_STEPS.length - 1 ? '<button type="button" id="photoSkipBtn">이 사진 건너뛰기 ▶</button>' : '') +
       '</div>';
     if (el('photoPrevBtn')) {
       el('photoPrevBtn').onclick = function() { state.photoStepIndex--; renderPhotoStepper(); };
@@ -774,160 +716,20 @@
         .then(function(r) { return r.json(); });
   }
 
-  function verifySerial() {
-    if (!state.selectedScanner) return;
-    state.serialStatus = 'checking';
-    state.serialOverride = false;
-    state.serialMsg = '확인 중...';
-    renderSerialStatus();
-    renderActionButtons();
-    postJson('verify_serial', {
-      scanner_id: state.selectedScanner,
-      employee_name: state.selectedEmployee,
-      photo_base64: state.photos.serial,
-    }).then(handleSerialResult).catch(function(err) {
-      state.serialAttempts++;
-      state.serialStatus = 'fail';
-      state.serialMsg = '확인에 실패했습니다: ' + err;
-      renderSerialStatus();
-      renderActionButtons();
-    });
-  }
-
-  function handleSerialResult(res) {
-    if (res.status === 'match') {
-      state.serialStatus = 'match'; state.serialAttempts = 0;
-      state.verifiedForScanner = state.selectedScanner;
-      state.serialMsg = '✅ 시리얼 번호 확인됨';
-    } else if (res.status === 'not_configured') {
-      // 이 스캐너는 아직 시트에 시리얼 번호가 등록 안 돼 있어서 확인 없이 통과된다는
-      // 뜻 - 예전엔 이 상태에서 메시지를 비워둬서(serialMsg='') 화면에 아무 표시도
-      // 없이 조용히 통과되는 바람에 "확인해서 맞다고 나온 줄 알았다"는 오해가 실제로
-      // 있었다(2026-09-08). 눈에 보이는 경고로 바꿈.
-      state.serialStatus = 'not_configured';
-      state.verifiedForScanner = state.selectedScanner;
-      state.serialMsg = '⚠️ 이 스캐너는 아직 시리얼 번호가 등록되지 않아 확인 없이 진행됩니다(관리자에게 등록 요청)';
-    } else if (res.status === 'mismatch') {
-      state.serialAttempts++; state.serialStatus = 'fail';
-      state.serialMsg = '❌ 시리얼 번호가 다릅니다' + (res.read_value ? ' (인식됨: ' + res.read_value + ')' : '') + ' · 다시 찍어주세요';
-    } else if (res.status === 'unreadable') {
-      state.serialAttempts++; state.serialStatus = 'fail';
-      state.serialMsg = '❌ 시리얼 번호를 읽지 못했습니다 · 더 가까이, 밝은 곳에서 다시 찍어주세요';
-    } else if (res.error === 'no_api_key') {
-      state.serialAttempts++; state.serialStatus = 'fail';
-      state.serialMsg = '❌ 시리얼 확인 기능이 아직 설정 전입니다(관리자에게 문의) · 계속하려면 아래 버튼';
-    } else {
-      state.serialAttempts++; state.serialStatus = 'fail';
-      state.serialMsg = '❌ 확인 중 문제가 발생했습니다: ' + (res.error || '알 수 없는 오류') + ' · 다시 찍어주세요';
-    }
-    renderSerialStatus();
-    renderActionButtons();
-  }
-
-  // 아직 스캐너를 고르지 않은 상태에서 시리얼 사진을 찍으면 이 경로로 온다 - 모든
-  // 스캐너의 시리얼 번호와 비교해서 어떤 스캐너인지 서버가 자동으로 찾아준다
-  // (2026-09-08 사장님 요청 - "시리얼 사진만 촬영해도 어떤 장비인지 바로 매칭").
-  // 찾으면 그 스캐너가 자동으로 선택되고 이미 확인된 것으로 처리된다.
-  function identifyScanner() {
-    state.serialStatus = 'checking';
-    state.serialOverride = false;
-    state.serialMsg = '사진으로 스캐너 찾는 중...';
-    renderSerialStatus();
-    renderActionButtons();
-    postJson('identify_serial', {
-      photo_base64: state.photos.serial,
-      employee_name: state.selectedEmployee,
-    }).then(handleIdentifyResult).catch(function(err) {
-      state.serialStatus = 'fail';
-      state.serialMsg = '확인에 실패했습니다: ' + err;
-      renderSerialStatus();
-      renderActionButtons();
-    });
-  }
-
-  function handleIdentifyResult(res) {
-    if (res.status === 'matched') {
-      state.selectedScanner = res.scanner_id;
-      state.verifiedForScanner = res.scanner_id;
-      state.serialStatus = 'match';
-      state.serialAttempts = 0;
-      state.serialMsg = '✅ 사진으로 자동 확인됨: ' + res.label + ' (' + res.model + ')';
-      saveDraft_();
-      // 이미 불러와둔 스캐너 목록 안에 이 스캐너 정보가 있으니 화면은 바로
-      // 갱신하고, 최신 상태 재확인(loadConfig)은 뒤에서 이어서 진행한다
-      // (2026-09-09 사장님 요청 - 클릭 이후 처리 속도).
-      renderAll();
-      loadConfig();
-      return;
-    }
-    if (res.status === 'no_match') {
-      state.serialStatus = 'fail';
-      state.serialMsg = '❌ 이 시리얼 번호와 일치하는 스캐너를 찾지 못했습니다' +
-          (res.read_value ? ' (인식됨: ' + res.read_value + ')' : '') + ' · 위에서 직접 선택해주세요';
-      el('scannerPicker').classList.remove('hidden');
-      renderScannerPicker();
-    } else if (res.status === 'ambiguous') {
-      state.serialStatus = 'fail';
-      state.serialMsg = '❌ 같은 시리얼 번호가 스캐너 여러 대(' + res.candidates.join(', ') +
-          ')에 등록되어 있습니다. 관리자에게 알려주세요';
-    } else if (res.status === 'unreadable') {
-      state.serialAttempts++; state.serialStatus = 'fail';
-      state.serialMsg = '❌ 시리얼 번호를 읽지 못했습니다 · 더 가까이, 밝은 곳에서 다시 찍어주세요';
-    } else if (res.error === 'no_api_key') {
-      state.serialAttempts++; state.serialStatus = 'fail';
-      state.serialMsg = '❌ 시리얼 확인 기능이 아직 설정 전입니다(관리자에게 문의) · 위에서 직접 선택해주세요';
-      el('scannerPicker').classList.remove('hidden');
-      renderScannerPicker();
-    } else {
-      state.serialAttempts++; state.serialStatus = 'fail';
-      state.serialMsg = '❌ 확인 중 문제가 발생했습니다: ' + (res.error || '알 수 없는 오류') + ' · 다시 찍어주세요';
-    }
-    renderSerialStatus();
-    renderActionButtons();
-  }
-
-  function renderSerialStatus() {
-    var box = el('serialStatus');
-    var overrideBtn = el('serialOverrideBtn');
-    if (!state.photos.serial || !state.serialMsg) {
-      box.classList.add('hidden');
-    } else {
-      box.classList.remove('hidden');
-      box.textContent = state.serialMsg;
-      box.className = 'serial-status ' +
-          (state.serialStatus === 'match' ? 'match' : state.serialStatus === 'checking' ? 'checking' : 'fail');
-    }
-    var showOverride = state.serialStatus === 'fail' && state.serialAttempts >= SERIAL_RETRY_LIMIT && !state.serialOverride;
-    overrideBtn.classList.toggle('hidden', !showOverride);
-  }
-
-  el('serialOverrideBtn').onclick = function() {
-    state.serialOverride = true;
-    state.serialMsg = '⚠️ 확인 없이 진행합니다(기록에 남습니다)';
-    renderSerialStatus();
-    renderActionButtons();
-  };
-
   el('photoSkipAllBtn').onclick = function() {
     // 예전엔 여기서 사진 단계만 1번으로 초기화하고 끝나서, 사장님 말씀대로
     // "눌러도 안 넘어가지는" 것처럼 보였다(2026-09-09 버그 수정) - 이제는 사진
     // 없이 바로 다음 칸(예약자 정보)으로 스크롤/포커스해서 눈에 보이게 넘어간다.
-    resetPhotoAndSerial();
+    resetPhoto_();
     renderPhotoCard();
     el('employeeCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
     el('employeeInput').focus();
   };
 
-  function resetPhotoAndSerial() {
-    state.photos = { front: null, side: null, overall: null, serial: null };
+  function resetPhoto_() {
+    state.photos = { overall: null, parts: null };
     state.photoStepIndex = 0;
-    state.serialStatus = null;
-    state.serialAttempts = 0;
-    state.serialOverride = false;
-    state.serialMsg = '';
-    state.verifiedForScanner = null;
     el('photoInput').value = '';
-    renderSerialStatus();
   }
 
   el('changeScannerBtn').onclick = function() {
@@ -988,7 +790,7 @@
     // 사진이 있으면 구글 드라이브에 올리는 시간이 꽤 걸려서(2026-09-11 실제
     // 확인 - 사진 여러 장이면 20~30초 가까이 걸릴 수 있음), 그냥 "처리 중"만
     // 보여주면 멈춘 것처럼 보여서 불안해할 수 있다 - 미리 안내해준다.
-    var hasAnyPhoto = !!(state.photos.serial || state.photos.front || state.photos.side || state.photos.overall);
+    var hasAnyPhoto = !!(state.photos.overall || state.photos.parts);
     showMsg(hasAnyPhoto ? '처리 중입니다... 사진이 있어서 최대 30초 정도 걸릴 수 있어요.' : '처리 중입니다...', 'checking');
     postJson('reserve', {
       action: 'reserve',
@@ -998,11 +800,8 @@
       end_date: state.endDate,
       start_time: state.useTime ? state.startTime : '',
       end_time: state.useTime ? state.endTime : '',
-      photo_base64: state.photos.serial || '',
-      photo_front_base64: state.photos.front || '',
-      photo_side_base64: state.photos.side || '',
       photo_overall_base64: state.photos.overall || '',
-      serial_check: state.serialOverride ? 'mismatch(수동진행)' : (state.serialStatus || ''),
+      photo_parts_base64: state.photos.parts || '',
       note: buildNote(),
       source: requestSource,
     }).then(function(res) { handleActionResult('reserve', res); })
@@ -1036,16 +835,13 @@
     if (!active) return;
     state.busy = true;
     renderActionButtons();
-    var hasAnyPhoto = !!(state.photos.serial || state.photos.front || state.photos.side || state.photos.overall);
+    var hasAnyPhoto = !!(state.photos.overall || state.photos.parts);
     showMsg(hasAnyPhoto ? '처리 중입니다... 사진이 있어서 최대 30초 정도 걸릴 수 있어요.' : '처리 중입니다...', 'checking');
     postJson('confirm_pickup', {
       action: 'confirm_pickup',
       reservation_id: active.reservation_id,
-      photo_base64: state.photos.serial || '',
-      photo_front_base64: state.photos.front || '',
-      photo_side_base64: state.photos.side || '',
       photo_overall_base64: state.photos.overall || '',
-      serial_check: state.serialOverride ? 'mismatch(수동진행)' : (state.serialStatus || ''),
+      photo_parts_base64: state.photos.parts || '',
       note: buildNote(),
       source: requestSource,
     }).then(function(res) { handleActionResult('confirm_pickup', res); })
@@ -1086,7 +882,7 @@
       // 대여/예약이 실제로 완료됐으니, 이어서 하기용으로 저장해뒀던 임시
       // 정보는 더 이상 필요 없다(2026-09-11).
       if (type === 'reserve') clearDraft_();
-      resetPhotoAndSerial();
+      resetPhoto_();
       el('noteInput').value = '';
       state.editingDates = false;
       // 처리 자체는 끝났으니 화면(버튼 등)은 바로 다시 눌러볼 수 있게 풀어준다 -
@@ -1276,18 +1072,9 @@
       state.photos[step.key] = dataUrl;
       saveDraft_();
       el('photoInput').value = '';
-      if (step.key === 'serial') {
-        state.verifiedForScanner = null;
-        renderPhotoStepper();
-        // 아직 스캐너를 안 골랐으면 사진으로 자동으로 찾고, 이미 골라뒀으면 그
-        // 스캐너와 일치하는지만 확인한다(2026-09-08).
-        if (state.selectedScanner) verifySerial(); else identifyScanner();
-      } else {
-        // 정면/옆면/전체 사진은 확인 절차 없이 바로 다음 단계로 넘어간다
-        // (2026-09-09 사장님 요청 - 촬영 단계를 안내).
-        if (state.photoStepIndex < PHOTO_STEPS.length - 1) state.photoStepIndex++;
-        renderPhotoStepper();
-      }
+      // 확인 절차 없이 바로 다음 단계로 넘어간다(2026-09-09 사장님 요청 - 촬영 단계를 안내).
+      if (state.photoStepIndex < PHOTO_STEPS.length - 1) state.photoStepIndex++;
+      renderPhotoStepper();
     });
   });
 
@@ -1390,7 +1177,6 @@
     renderRangeResultHint_();
     renderScannerPicker();
     renderPhotoCard();
-    renderSerialStatus();
     renderActionButtons();
     renderProgressSteps();
   }
@@ -1418,7 +1204,7 @@
 
   function saveDraft_() {
     var hasContent = !!(state.selectedScanner || state.selectedEmployee ||
-        state.photos.front || state.photos.side || state.photos.overall || state.photos.serial);
+        state.photos.overall || state.photos.parts);
     if (!hasContent) { clearDraft_(); return; }
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
@@ -1446,7 +1232,7 @@
       var draft = JSON.parse(raw);
       if (!draft || !draft.savedAt || (Date.now() - draft.savedAt) > DRAFT_TTL_MS) { clearDraft_(); return null; }
       var p = draft.photos || {};
-      if (!draft.selectedScanner && !draft.selectedEmployee && !p.front && !p.side && !p.overall && !p.serial) return null;
+      if (!draft.selectedScanner && !draft.selectedEmployee && !p.overall && !p.parts) return null;
       return draft;
     } catch (e) { return null; }
   }
