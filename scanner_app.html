@@ -414,7 +414,8 @@
   // 예전엔 파이썬 서버가 대신 예약 달력으로 돌려보내줬는데, 정적 사이트라 서버가
   // 없으니 화면이 스스로 판단해서 옮겨준다(2026-09-16).
   if (!new URLSearchParams(window.location.search).get('scanner_id')) {
-    location.replace('index.html');
+    var adminKey = new URLSearchParams(window.location.search).get('admin_key');
+    location.replace(adminKey ? 'index.html?admin_key=' + encodeURIComponent(adminKey) : 'index.html');
   }
 
   // 2026-10-08부터 "PS C"/"PS 2" 두 가지로 고정하지 않고, 시트에 실제로 있는
@@ -723,6 +724,9 @@
     var payload = body || {};
     payload.action = action;
     payload.token = APPS_SCRIPT_TOKEN;
+    // 관리자 전용 링크(?admin_key=...)로 들어온 경우, 점검모드 중에도 계속
+    // 쓸 수 있도록 매 요청에 실어 보낸다(2026-10-12 사장님 요청).
+    if (window.dsAdminKey_) payload.maint_key = window.dsAdminKey_;
     return fetch(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) })
         .then(function(r) { return r.json(); });
   }
