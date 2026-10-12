@@ -1563,25 +1563,38 @@
     // 나눠 쌓는다(2026-09-10 사장님 요청 - 시간 단위 예약 기능 표시 보완).
     // 날짜만으로 겹치는 예약은 서버에서 이미 막기 때문에, 한 날짜에 여러 막대가
     // 같이 있을 수 있는 경우는 "같은 스캐너 + 같은 하루 + 서로 다른 시간대"뿐이다.
+    // 2026-10-12 버그 수정(사장님 신고 - "날짜가 겹치지 않는데도 대여 표시가
+    // 작아짐"): ① byDate를 start_date가 같은 모든 예약(날짜 범위 예약, 지난
+    // 반납 기록 포함)으로 묶었더니, 우연히 시작일만 같고 실제로는 전혀 안
+    // 겹치는 예약까지 한 칸으로 묶여버렸다 - 이제 "하루짜리+시간 지정" 예약만
+    // 묶는다. ② maxLanes가 그 스캐너 행 전체에서 "한 번이라도 겹친 날"이 있으면
+    // 행 전체 막대가 다 작아지게 적용돼 있었다 - 이제 그 막대 자신이 실제로
+    // 속한 날짜 그룹의 크기(laneGroupSize)로 막대마다 따로 판단한다.
     var LANE_H = 24, LANE_PAD = 8;
     rows.forEach(function(r) {
       if (r.type !== 'scanner') return;
       var list = byScanner[r.data.scanner_id] || [];
       var byDate = {};
       list.forEach(function(res) {
+        if (!(res.start_time && res.end_time && res.start_date === res.end_date)) return;
         (byDate[res.start_date] = byDate[res.start_date] || []).push(res);
       });
       var laneMap = {};
+      var laneGroupSize = {};
       var maxLanes = 1;
       Object.keys(byDate).forEach(function(dateKey) {
         var group = byDate[dateKey];
         if (group.length > 1) {
           group.sort(function(a, b) { return (a.start_time || '').localeCompare(b.start_time || ''); });
         }
-        group.forEach(function(res, i) { laneMap[res.reservation_id] = i; });
+        group.forEach(function(res, i) {
+          laneMap[res.reservation_id] = i;
+          laneGroupSize[res.reservation_id] = group.length;
+        });
         if (group.length > maxLanes) maxLanes = group.length;
       });
       r.laneMap = laneMap;
+      r.laneGroupSize = laneGroupSize;
       r.maxLanes = maxLanes;
       r.rowH = maxLanes > 1 ? Math.max(ROW_H, LANE_PAD + maxLanes * LANE_H) : ROW_H;
     });
@@ -1780,7 +1793,7 @@
             return function() { openAdminEditReturned_(res); };
           })(res);
           place(bar, row, clipStart + 1, clipEnd + 2);
-          if (r.maxLanes > 1) {
+          if ((r.laneGroupSize[res.reservation_id] || 1) > 1) {
             var laneR = r.laneMap[res.reservation_id] || 0;
             bar.style.alignSelf = 'start';
             bar.style.height = (LANE_H - 4) + 'px';
@@ -1820,9 +1833,11 @@
         // 끌지 않고 그냥 누르기만 하면(클릭) 기존처럼 삭제 확인창이 뜬다.
         attachMoveHandle(bar, s.scanner_id, res, todayStr);
 
-        // 이 행에 시간 단위로 겹쳐있는 예약이 있으면(maxLanes > 1) 막대 높이를
-        // 줄이고 자기 순번(lane)만큼 아래로 내려서 겹치지 않게 배치한다.
-        if (r.maxLanes > 1) {
+        // 이 막대가 같은 날 시간대로 실제 겹쳐있는 다른 예약과 한 그룹이면
+        // (laneGroupSize > 1) 막대 높이를 줄이고 자기 순번(lane)만큼 아래로
+        // 내려서 겹치지 않게 배치한다(2026-10-12 - 행 전체가 아니라 막대마다
+        // 따로 판단하도록 수정, 위 설명 참고).
+        if ((r.laneGroupSize[res.reservation_id] || 1) > 1) {
           var lane = r.laneMap[res.reservation_id] || 0;
           bar.style.alignSelf = 'start';
           bar.style.height = (LANE_H - 4) + 'px';
