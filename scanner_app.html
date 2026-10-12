@@ -896,6 +896,14 @@
       resetPhoto_();
       el('noteInput').value = '';
       state.editingDates = false;
+      // 2026-10-12 사장님 요청 - "날짜 클릭 후 대여하기를 누르면 달력(홈 화면)
+      // 으로 이동하도록": 새로 대여/예약을 마치면 이 화면에 머물지 않고 잠깐
+      // 성공 알림을 보여준 뒤 달력으로 돌아간다.
+      if (type === 'reserve') {
+        showSuccessToast(res.new_status === '대여중' ? '대여가 완료되었습니다' : '예약이 완료되었습니다');
+        setTimeout(function() { navigateWithFade('index.html'); }, 900);
+        return;
+      }
       // 처리 자체는 끝났으니 화면(버튼 등)은 바로 다시 눌러볼 수 있게 풀어준다 -
       // 최신 상태 재확인(loadConfig)은 화면을 막지 않고 뒤에서 이어서 진행한다
       // (2026-09-09 사장님 요청 - 완료 후 버튼이 몇 초간 굳어있던 문제 수정).
