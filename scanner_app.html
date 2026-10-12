@@ -537,6 +537,17 @@
   function activeReservationForSelectedScanner() {
     var s = state.selectedScanner ? findScanner(state.selectedScanner) : null;
     if (!s || s.status === 'available') return null;
+    // 2026-10-12 버그 수정 - "미래(또는 지금) 예약이 있는 스캐너를, 그 예약과
+    // 안 겹치는 다른 기간으로 새로 예약하려고 하면 그 기존 예약의 수령확인/반납
+    // 쪽으로 잘못 연결되어 대여가 안 되던 증상"(사장님 신고). 지금 고른 기간
+    // (state.startDate~endDate)을 둘 다 입력했는데 이 대표 예약과 실제로 안
+    // 겹치면, 새로 예약하려는 것으로 보고 null을 돌려준다(진짜 겹치면 서버가
+    // 따로 막아준다 - findOverlappingReservation_). 날짜를 아직 안 골랐을 때
+    // (예: QR로 들어와 바로 수령확인하는 경우)는 기존대로 동작한다.
+    if (state.startDate && state.endDate && s.start_date && s.expected_return) {
+      var overlaps = state.startDate <= s.expected_return && s.start_date <= state.endDate;
+      if (!overlaps) return null;
+    }
     return s;
   }
 
