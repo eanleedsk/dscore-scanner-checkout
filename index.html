@@ -114,6 +114,39 @@
       flex: none;
     }
     .guide-btn:active { background: var(--bg); }
+    .search-btn { color: var(--navy); }
+    .search-btn svg { width: 13px; height: 13px; }
+
+    /* 예약 찾기(2026-10-13 사장님 요청 - "이름/치과명 검색"). 이미 받아둔 예약
+       목록 안에서 바로 찾아서 서버 요청 없이 즉시 결과가 뜬다. */
+    .sr-input {
+      width: 100%; height: 46px; border-radius: 10px; border: 1.5px solid var(--border);
+      padding: 0 14px; font-size: 16px; font-family: inherit; color: var(--text); background: var(--surface);
+    }
+    .sr-input:focus { outline: none; border-color: var(--brand); }
+    .sr-results {
+      margin-top: 12px; max-height: min(52vh, 420px); overflow-y: auto; -webkit-overflow-scrolling: touch;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .sr-hint { font-size: 12.5px; color: var(--muted); line-height: 1.5; padding: 6px 2px; }
+    .sr-item {
+      display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+      padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface);
+      font-family: inherit; cursor: pointer; color: var(--text);
+    }
+    .sr-item:active, .sr-item:hover { background: var(--bg); }
+    .sr-item:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+    .sr-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .sr-name { font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sr-meta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .sr-chip {
+      flex: none; font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 999px; white-space: nowrap;
+    }
+    .sr-chip.held { background: var(--held-bg); color: var(--held); }
+    .sr-chip.reserved { background: var(--reserved-bg); color: var(--brand-dark); }
+    .sr-chip.returned { background: var(--returned-bg); color: var(--returned); }
+    .sr-chip.overdue { background: #FBE9E7; color: #B3261E; }
+    .sr-close-row { margin-top: 12px; }
 
     /* 2026-10-08 - 장비명 칸을 가로 스크롤되는 달력(.gantt)과 완전히 분리된
        별도 그리드(.gantt-labels)로 뗴어냈다(사장님 요청 - "옆으로 넘길때마다
@@ -400,9 +433,19 @@
          보려고 막대 위를 스쳐 지나가며 스크롤"하는 것까지 전부 막아버려서,
          살짝만 스쳐도 화면이 안 움직이고 탭(클릭)으로 처리돼 실수로 삭제창이
          뜨는 문제가 있었다(2026-10-13 사장님 신고 - "다른 대여를 실수로
-         클릭하게 되는데"). 이제 touch-action은 기본값(스크롤 가능)으로 두고,
-         실제로 꾹 눌러서(롱프레스) 드래그를 시작할 때만 attachMoveHandle이
-         JS로 그때그때 touch-action을 none으로 바꿔준다. */
+         클릭하게 되는데"). 이제 스크롤은 기본으로 허용하고, 꾹 눌러서(롱프레스)
+         드래그가 시작된 뒤에만 blockScrollWhileDragging_의 touchmove 처리로
+         화면 스크롤을 막는다. 꾹 누를 때 휴대폰의 글자 선택/메뉴가 뜨지 않게 한다. */
+      -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+    }
+    /* 예약 찾기에서 고른 막대를 잠깐 깜빡여 위치를 알려준다(2026-10-13). */
+    @keyframes barFound {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(234,118,0,0); }
+      50% { box-shadow: 0 0 0 5px rgba(234,118,0,0.55); }
+    }
+    .bar.bar-found { animation: barFound .7s ease-in-out 4; z-index: 5; }
+    @media (prefers-reduced-motion: reduce) {
+      .bar.bar-found { animation: none; outline: 3px solid var(--brand); outline-offset: 1px; }
     }
     /* 막대 자체는 overflow:visible을 유지해야 양쪽 끝 드래그 손잡이(bar-handle,
        막대 바깥으로 살짝 튀어나오게 배치됨)가 잘리지 않는다 - 그래서 말줄임은
@@ -420,9 +463,11 @@
     /* 막대 몸통을 끌어서 이동하는 동안(2026-09-11 사장님 요청) 지금 옮기고
        있다는 걸 눈에 띄게 보여준다. */
     .bar.bar-dragging { cursor: grabbing; opacity: 0.85; box-shadow: 0 3px 10px rgba(10,37,64,0.35); z-index: 4; }
+    /* 양쪽 끝 손잡이도 막대 몸통과 같은 방식(2026-10-13) - 스크롤은 허용하고,
+       꾹 눌러서 드래그가 시작된 뒤에만 스크롤을 막는다. */
     .bar-handle {
       position: absolute; top: -4px; bottom: -4px; width: 20px; z-index: 3;
-      cursor: ew-resize; touch-action: none;
+      cursor: ew-resize;
     }
     .bar-handle.left { left: -8px; }
     .bar-handle.right { right: -8px; }
@@ -467,6 +512,11 @@
       <span class="chip chip-reserved"><i></i>예약됨</span>
       <span class="chip chip-today"><i></i>오늘</span>
     </div>
+    <button class="guide-btn search-btn" id="searchBtn" type="button" aria-label="예약 찾기" title="예약 찾기">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+        <circle cx="7" cy="7" r="4.6"></circle><path d="M10.5 10.5 14 14"></path>
+      </svg>
+    </button>
     <button class="guide-btn" id="guideBtn" type="button" aria-label="이용 가이드">?</button>
   </div>
 </header>
@@ -1290,26 +1340,75 @@
   // (2026-09-09 사장님 요청). 하루 단위로 딱딱 붙는(snap) 방식이라 손가락으로도
   // 정확히 원하는 날짜에 맞추기 쉽다. 겹치는 예약 검사는 서버가 하지 않으므로
   // (중복 대여 허용 정책) 클라이언트에서도 따로 막지 않는다.
+  // 드래그 중 막대에 날짜를 보여줄 때 막대 전체(textContent)를 덮어쓰면 안에 있던
+  // 글자 칸과 양쪽 손잡이가 통째로 지워진다. 그러면 손가락이 짚고 있던 요소가
+  // 화면에서 사라져서, 휴대폰 브라우저가 "이 터치는 드래그 중"이라는 걸 더 이상
+  // 알 수 없게 되고 화면이 대신 스크롤돼버린다(2026-10-13 시험 중 발견). 글자 칸만 바꾼다.
+  function barText_(barEl) {
+    var lbl = barEl.querySelector('.bar-label');
+    return (lbl || barEl).textContent;
+  }
+  function setBarText_(barEl, text) {
+    var lbl = barEl.querySelector('.bar-label');
+    if (lbl) lbl.textContent = text; else barEl.textContent = text;
+  }
+
+  // 2026-10-13 - 막대 몸통(attachMoveHandle)과 같은 이유로, 터치에서는 손잡이도
+  // 꾹 눌러야(롱프레스) 드래그가 시작되고, 그 전에 움직이면 그냥 화면 스크롤로 둔다
+  // (막대 끝을 스치며 달력을 넘기다 기간이 바뀌는 실수 방지). 마우스는 기존처럼 바로.
   function attachResizeHandle(handleEl, barEl, scannerId, res, edge, todayStr) {
     handleEl.addEventListener('pointerdown', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      handleEl.setPointerCapture(e.pointerId);
+      e.stopPropagation(); // 막대 몸통 이동(attachMoveHandle)이 같이 시작되지 않게.
+      var isTouch = e.pointerType === 'touch';
+      var startClientX = e.clientX, startClientY = e.clientY;
+      var dragActive = !isTouch;
+      var longPressTimer = null;
+      if (isTouch) {
+        longPressTimer = setTimeout(function() {
+          dragActive = true;
+          barEl._dsDragActive = true;
+          signalDragStart_(barEl);
+          try { handleEl.setPointerCapture(e.pointerId); } catch (err) { /* 무시 */ }
+        }, LONG_PRESS_MS);
+      } else {
+        e.preventDefault();
+        handleEl.setPointerCapture(e.pointerId);
+      }
       var startX = e.clientX;
       var curStart = res.start_date, curEnd = res.end_date;
       var moved = false;
-      var origLabel = barEl.textContent;
+      var origLabel = barText_(barEl);
+
+      function detach() {
+        if (longPressTimer) clearTimeout(longPressTimer);
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        document.removeEventListener('pointercancel', onCancel);
+        barEl._dsDragActive = false;
+      }
+      function onCancel() {
+        detach();
+        barEl.classList.remove('bar-dragging');
+        if (moved) updateBarVisualToOriginal(); else setBarText_(barEl, origLabel);
+      }
 
       function updateBarVisual() {
         var s2 = Math.max(dayIndex(curStart, windowStart), 0);
         var e2 = Math.min(dayIndex(curEnd, windowStart), WINDOW_DAYS - 1);
         barEl.style.gridColumn = (s2 + 2) + ' / ' + (e2 + 3);
-        barEl.textContent = curStart + ' ~ ' + curEnd;
+        setBarText_(barEl, curStart + ' ~ ' + curEnd);
       }
 
       function onMove(ev) {
+        if (!dragActive) {
+          if (Math.abs(ev.clientX - startClientX) > TOUCH_SLOP_PX || Math.abs(ev.clientY - startClientY) > TOUCH_SLOP_PX) {
+            detach(); // 롱프레스 전에 움직임 = 화면 스크롤 의도.
+          }
+          return;
+        }
         var deltaDays = Math.round((ev.clientX - startX) / COL_W);
         if (deltaDays === 0 && !moved) return;
+        ev.preventDefault();
         if (edge === 'start') {
           var newStart = toISO(addDays(parseISO(res.start_date), deltaDays));
           if (newStart < todayStr) newStart = todayStr;
@@ -1327,7 +1426,7 @@
       // 다른 예약과 겹치는 쪽으로 끌어다 놓으면(2026-09-10 사장님 요청) 서버가
       // 'conflict'로 알려준다 - 우회 없이 그냥 막고 원래대로 되돌린 뒤 안내만 한다.
       function saveResize() {
-        barEl.textContent = '저장 중...';
+        setBarText_(barEl, '저장 중...');
         postJson_('edit_reservation', {
             reservation_id: res.reservation_id,
             start_date: curStart,
@@ -1337,22 +1436,22 @@
           if (data.status === 'ok') {
             res.start_date = curStart;
             res.end_date = curEnd;
-            barEl.textContent = origLabel;
+            setBarText_(barEl, origLabel);
             load(); // 다른 사람 변경사항까지 포함한 정확한 상태로 뒤에서 맞춘다.
           } else if (data.status === 'conflict') {
-            barEl.textContent = origLabel;
+            setBarText_(barEl, origLabel);
             updateBarVisualToOriginal();
             showAlert('이미 ' + data.current_holder + '님이 ' + (data.conflict_status === '대여중' ? '대여중' : '예약') +
                 '인 기간과 겹쳐서 지금은 이 기간으로 바꿀 수 없습니다(' + data.conflict_start + '~' + data.conflict_end +
                 (data.conflict_start_time && data.conflict_end_time ? (' ' + data.conflict_start_time + '~' + data.conflict_end_time) : '') + ').',
                 { tone: 'warn' });
           } else {
-            barEl.textContent = origLabel;
+            setBarText_(barEl, origLabel);
             updateBarVisualToOriginal();
             showAlert('기간을 바꾸지 못했습니다: ' + (data.error || '알 수 없는 오류'));
           }
         }).catch(function(err) {
-          barEl.textContent = origLabel;
+          setBarText_(barEl, origLabel);
           updateBarVisualToOriginal();
           showAlert('연결에 실패했습니다: ' + err);
         });
@@ -1362,7 +1461,7 @@
         var s2 = Math.max(dayIndex(res.start_date, windowStart), 0);
         var e2 = Math.min(dayIndex(res.end_date, windowStart), WINDOW_DAYS - 1);
         barEl.style.gridColumn = (s2 + 2) + ' / ' + (e2 + 3);
-        barEl.textContent = origLabel;
+        setBarText_(barEl, origLabel);
       }
 
       // 2026-10-08 사장님 요청 - "다른 사람이 실수로 날짜를 변경할 수 있을거
@@ -1371,10 +1470,10 @@
       // (전부 원래 자리로 되돌림), 진짜 바꾸려는 경우만 "변경" 버튼을 눌러
       // 저장된다.
       function onUp() {
-        document.removeEventListener('pointermove', onMove);
-        document.removeEventListener('pointerup', onUp);
-        if (!moved || (curStart === res.start_date && curEnd === res.end_date)) {
-          barEl.textContent = origLabel; // 실제로 안 바뀌었으면 원래대로.
+        detach();
+        barEl.classList.remove('bar-dragging');
+        if (!dragActive || !moved || (curStart === res.start_date && curEnd === res.end_date)) {
+          if (moved) updateBarVisualToOriginal(); else setBarText_(barEl, origLabel); // 실제로 안 바뀌었으면 원래대로.
           return;
         }
         // 드래그 뒤에 이어지는 click 이벤트가 삭제 확인창을 띄우지 않도록, 확인창을
@@ -1391,6 +1490,7 @@
 
       document.addEventListener('pointermove', onMove);
       document.addEventListener('pointerup', onUp);
+      document.addEventListener('pointercancel', onCancel);
     });
   }
 
@@ -1406,7 +1506,28 @@
   // 그 전에 조금이라도(8px 이상) 움직이면 "날짜를 넘기려는 스크롤"로 보고
   // 드래그를 포기해서, 화면이 평소처럼 자연스럽게 옆으로 스크롤된다. 마우스/펜은
   // 스크롤과 부딪힐 일이 없어서 기존처럼 즉시 드래그된다.
+  // 2026-10-13 보완 - 처음엔 롱프레스가 확정되는 순간 touch-action을 none으로
+  // 바꾸는 방식이었는데, 휴대폰 브라우저는 손가락을 댄 순간의 설정으로 스크롤 여부를
+  // 이미 정해버려서 도중에 바꾼 값은 무시될 수 있다(드래그하려는데 화면이 같이
+  // 밀릴 수 있음). 대신 touchmove 이벤트를 직접 막는 방식(passive:false)을 쓴다 -
+  // 이건 손가락을 움직이는 매 순간 판단되므로 롱프레스 확정 뒤에만 정확히 막힌다.
+  // 막대마다 한 번만 건다. 양쪽 끝 손잡이의 touchmove도 막대로 올라오므로 같이 처리된다.
+  function blockScrollWhileDragging_(barEl) {
+    barEl.addEventListener('touchmove', function(ev) {
+      if (barEl._dsDragActive) ev.preventDefault();
+    }, { passive: false });
+  }
+  var LONG_PRESS_MS = 400;
+  var TOUCH_SLOP_PX = 8;
+  // 롱프레스로 드래그가 시작됐다는 걸 눈(막대가 떠오름)과 손(짧은 진동 - 안드로이드만,
+  // 아이폰 사파리는 진동 기능 자체가 없음)으로 알려준다.
+  function signalDragStart_(barEl) {
+    barEl.classList.add('bar-dragging');
+    if (navigator.vibrate) { try { navigator.vibrate(15); } catch (err) { /* 무시 */ } }
+  }
+
   function attachMoveHandle(barEl, scannerId, res, todayStr) {
+    blockScrollWhileDragging_(barEl);
     barEl.addEventListener('pointerdown', function(e) {
       var isTouch = e.pointerType === 'touch';
       var startClientX = e.clientX, startClientY = e.clientY;
@@ -1417,12 +1538,13 @@
       function beginDrag() {
         if (cancelled || dragActive) return;
         dragActive = true;
-        barEl.style.touchAction = 'none';
+        barEl._dsDragActive = true;
+        signalDragStart_(barEl);
         try { barEl.setPointerCapture(e.pointerId); } catch (err) { /* 이미 손을 뗀 경우 등 - 무시 */ }
       }
 
       if (isTouch) {
-        longPressTimer = setTimeout(beginDrag, 400);
+        longPressTimer = setTimeout(beginDrag, LONG_PRESS_MS);
       } else {
         barEl.setPointerCapture(e.pointerId);
       }
@@ -1432,32 +1554,37 @@
       var spanDays = Math.round((parseISO(origEnd) - parseISO(origStart)) / 86400000);
       var curStart = origStart, curEnd = origEnd;
       var moved = false;
-      var origLabel = barEl.textContent;
+      var origLabel = barText_(barEl);
 
       function updateBarVisual() {
         var s2 = Math.max(dayIndex(curStart, windowStart), 0);
         var e2 = Math.min(dayIndex(curEnd, windowStart), WINDOW_DAYS - 1);
         barEl.style.gridColumn = (s2 + 2) + ' / ' + (e2 + 3);
-        barEl.textContent = curStart + ' ~ ' + curEnd;
+        setBarText_(barEl, curStart + ' ~ ' + curEnd);
       }
       function updateBarVisualToOriginal() {
         var s2 = Math.max(dayIndex(origStart, windowStart), 0);
         var e2 = Math.min(dayIndex(origEnd, windowStart), WINDOW_DAYS - 1);
         barEl.style.gridColumn = (s2 + 2) + ' / ' + (e2 + 3);
-        barEl.textContent = origLabel;
+        setBarText_(barEl, origLabel);
+      }
+
+      function detach() {
+        if (longPressTimer) clearTimeout(longPressTimer);
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        document.removeEventListener('pointercancel', onCancel);
+        barEl._dsDragActive = false;
       }
 
       function onMove(ev) {
         if (!dragActive) {
           // 롱프레스가 아직 확정되지 않은 터치 - 조금이라도(8px 이상) 움직이면
-          // "날짜를 넘기려는 스크롤"로 보고 드래그 시도 자체를 그만둔다(타이머
-          // 취소 + 리스너 정리). preventDefault를 안 불렀으니 화면은 그대로
-          // 자연스럽게 스크롤된다.
-          if (Math.abs(ev.clientX - startClientX) > 8 || Math.abs(ev.clientY - startClientY) > 8) {
+          // "날짜를 넘기려는 스크롤"로 보고 드래그 시도 자체를 그만둔다. 스크롤을
+          // 막지 않았으니 화면은 그대로 자연스럽게 스크롤된다.
+          if (Math.abs(ev.clientX - startClientX) > TOUCH_SLOP_PX || Math.abs(ev.clientY - startClientY) > TOUCH_SLOP_PX) {
             cancelled = true;
-            if (longPressTimer) clearTimeout(longPressTimer);
-            document.removeEventListener('pointermove', onMove);
-            document.removeEventListener('pointerup', onUp);
+            detach();
           }
           return;
         }
@@ -1479,7 +1606,7 @@
       // 막음) 서버가 'conflict'로 알려준다 - 우회 없이 그냥 막고 원래 자리로
       // 되돌린 뒤 안내만 한다.
       function saveMove() {
-        barEl.textContent = '저장 중...';
+        setBarText_(barEl, '저장 중...');
         postJson_('edit_reservation', {
             reservation_id: res.reservation_id,
             start_date: curStart,
@@ -1490,7 +1617,7 @@
           if (data.status === 'ok') {
             res.start_date = curStart;
             res.end_date = curEnd;
-            barEl.textContent = origLabel;
+            setBarText_(barEl, origLabel);
             load(); // 다른 사람 변경사항까지 포함한 정확한 상태로 뒤에서 맞춘다.
           } else if (data.status === 'conflict') {
             updateBarVisualToOriginal();
@@ -1513,13 +1640,19 @@
       // 같아" - 드래그가 끝나도 바로 저장하지 않고, 꼭 한 번 더 확인을 받는다.
       // 실수로 스친 드래그는 취소/바깥 클릭/뒤로가기 아무거나로 막히고(전부
       // 원래 자리로 되돌림), 진짜 옮기려는 경우만 "이동" 버튼을 눌러 저장된다.
+      // 브라우저가 터치를 중간에 가로채면(전화 수신, 스크롤로 넘어감 등) pointerup
+      // 대신 pointercancel이 온다 - 저장 없이 원래대로 되돌리고 정리만 한다.
+      function onCancel() {
+        detach();
+        barEl.classList.remove('bar-dragging');
+        if (moved) updateBarVisualToOriginal();
+      }
+
       function onUp() {
-        if (longPressTimer) clearTimeout(longPressTimer);
-        document.removeEventListener('pointermove', onMove);
-        document.removeEventListener('pointerup', onUp);
-        barEl.style.touchAction = ''; // 다음 번 터치부터는 다시 기본값(스크롤 가능)으로.
+        detach();
         if (!dragActive || !moved || (curStart === origStart && curEnd === origEnd)) {
-          if (moved) { barEl.classList.remove('bar-dragging'); updateBarVisualToOriginal(); }
+          barEl.classList.remove('bar-dragging');
+          if (moved) updateBarVisualToOriginal();
           return; // 실제로 안 옮겨졌으면(클릭이었거나 제자리) 그대로 둔다.
         }
         function revert() { barEl.classList.remove('bar-dragging'); updateBarVisualToOriginal(); }
@@ -1536,6 +1669,7 @@
 
       document.addEventListener('pointermove', onMove);
       document.addEventListener('pointerup', onUp);
+      document.addEventListener('pointercancel', onCancel);
     });
   }
 
@@ -1563,11 +1697,170 @@
     extraDays = 0;
     if (lastData) render(lastData); else load();
   };
+  // ---- 예약 찾기(2026-10-13 사장님 요청 - "이름/치과명 검색") ----
+  // 달력은 처음에 반납 안 된 예약을 기간 제한 없이 전부 받아두므로(load 참고),
+  // 그 목록(lastData) 안에서 바로 찾는다 - 서버에 다시 안 물어봐서 결과가 즉시 뜬다.
+  // 대소문자·띄어쓰기는 무시한다(메일 매칭과 같은 기준). 결과를 누르면 그 예약이
+  // 있는 달로 이동해서 막대를 화면 가운데로 가져오고 깜빡여 알려준다.
+  var SEARCH_QUERY_KEY = 'dsSearchQuery';
+  function normalizeSearch_(s) { return String(s || '').toLowerCase().replace(/\s+/g, ''); }
+  function escapeHtml_(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function shortDate_(iso) { var p = iso.split('-'); return Number(p[1]) + '/' + Number(p[2]); }
+
+  function findReservations_(query) {
+    var q = normalizeSearch_(query);
+    if (!q || !lastData) return [];
+    var scannerById = {};
+    (lastData.scanners || []).forEach(function(s) { scannerById[s.scanner_id] = s; });
+    var todayIso = toISO(new Date());
+    return (lastData.reservations || []).filter(function(r) {
+      var s = scannerById[r.scanner_id] || {};
+      return normalizeSearch_(r.employee_name + ' ' + (s.model || '') + ' ' + (s.label || '')).indexOf(q) >= 0;
+    }).sort(function(a, b) {
+      return a.start_date < b.start_date ? -1 : a.start_date > b.start_date ? 1 : 0;
+    }).slice(0, 50).map(function(r) {
+      var known = !!scannerById[r.scanner_id];
+      return {
+        res: r,
+        scanner: scannerById[r.scanner_id] || { model: '', label: r.scanner_id },
+        known: known,
+        // 반납예정일이 지났는데 아직 반납 안 된 건 - 달력은 오늘부터 보여주므로 막대가 안 보인다.
+        overdue: r.status === '대여중' && r.end_date < todayIso,
+      };
+    });
+  }
+
+  function openFoundReservation_(f) {
+    var r = f.res;
+    if (!f.known) {
+      showAlert('이 예약의 장비 코드(' + r.scanner_id + ')는 지금 장비 목록에 없어서 달력에 표시되지 않아요.\n' +
+          '구글시트 "스캐너목록"에서 장비 코드가 바뀌었거나 빠졌는지 확인해주세요.', { tone: 'warn' });
+      return;
+    }
+    if (f.overdue) {
+      showConfirm('반납예정일(' + r.end_date + ')이 지났는데 아직 반납되지 않은 예약이에요.\n' +
+          '지난 날짜라 달력에는 안 보여요. 대여 화면에서 반납하거나 기간을 수정할까요?',
+          function() {
+            navigateWithFade('scanner_app.html?scanner_id=' + encodeURIComponent(r.scanner_id) +
+                '&start_date=' + encodeURIComponent(r.start_date) + '&end_date=' + encodeURIComponent(r.end_date) +
+                '&focus=edit');
+          },
+          { okText: '대여 화면으로', cancelText: '닫기' });
+      return;
+    }
+    jumpToReservation_(r, f.scanner);
+  }
+
+  function openSearchSheet_() {
+    var saved = '';
+    try { saved = localStorage.getItem(SEARCH_QUERY_KEY) || ''; } catch (e) { /* 저장소 막힘 - 무시 */ }
+    var backdrop = document.createElement('div');
+    backdrop.className = 'confirm-backdrop';
+    backdrop.innerHTML =
+      '<div class="confirm-sheet" role="dialog" aria-label="예약 찾기">' +
+        '<h3>예약 찾기</h3>' +
+        '<input class="sr-input" type="search" enterkeyhint="search" autocomplete="off" ' +
+            'placeholder="이름, 치과명 또는 장비 이름" aria-label="찾을 이름">' +
+        '<div class="sr-results" aria-live="polite"></div>' +
+        '<div class="btn-row sr-close-row"><button class="cancel-btn" type="button">닫기</button></div>' +
+      '</div>';
+    document.body.appendChild(backdrop);
+    openSheetAnim_(backdrop);
+    var input = backdrop.querySelector('.sr-input');
+    var results = backdrop.querySelector('.sr-results');
+    input.value = saved;
+
+    function renderResults() {
+      var q = input.value.trim();
+      try { localStorage.setItem(SEARCH_QUERY_KEY, q); } catch (e) { /* 무시 */ }
+      if (!lastData) {
+        results.innerHTML = '<div class="sr-hint">예약 목록을 불러오는 중이에요. 잠시 후 다시 눌러주세요.</div>';
+        return;
+      }
+      if (!q) {
+        results.innerHTML = '<div class="sr-hint">이름이나 치과명 일부만 입력해도 찾아요(예: Paul, 바른).<br>' +
+            '지금 대여중이거나 앞으로 잡힌 예약을 찾을 수 있어요.</div>';
+        return;
+      }
+      var found = findReservations_(q);
+      if (!found.length) {
+        results.innerHTML = '<div class="sr-hint">"' + escapeHtml_(q) + '"(으)로 찾은 예약이 없어요.<br>' +
+            '이미 반납이 끝난 예전 예약은 여기서 찾을 수 없어요.</div>';
+        return;
+      }
+      results.innerHTML = found.map(function(f, i) {
+        var r = f.res;
+        var chip = f.overdue ? 'overdue' : r.status === '대여중' ? 'held' : r.status === '반납완료' ? 'returned' : 'reserved';
+        var chipText = f.overdue ? '연체' : r.status;
+        var dates = shortDate_(r.start_date) + (r.end_date !== r.start_date ? ' ~ ' + shortDate_(r.end_date) : '') +
+            (r.start_time && r.end_time ? ' ' + r.start_time + '~' + r.end_time : '');
+        var where = f.known ? (f.scanner.model + ' · ' + f.scanner.label) : (r.scanner_id + '(목록에 없는 장비)');
+        return '<button class="sr-item" type="button" data-idx="' + i + '">' +
+            '<span class="sr-main"><span class="sr-name">' + escapeHtml_(r.employee_name) + '</span>' +
+            '<span class="sr-meta">' + escapeHtml_(where) + ' · ' + dates + '</span></span>' +
+            '<span class="sr-chip ' + chip + '">' + escapeHtml_(chipText) + '</span></button>';
+      }).join('');
+      Array.prototype.forEach.call(results.querySelectorAll('.sr-item'), function(btn) {
+        btn.onclick = function() {
+          var picked = found[Number(btn.getAttribute('data-idx'))];
+          dsCloseOverlay_();
+          setTimeout(function() { openFoundReservation_(picked); }, 260);
+        };
+      });
+    }
+
+    var debounce = null;
+    input.addEventListener('input', function() {
+      clearTimeout(debounce);
+      debounce = setTimeout(renderResults, 120);
+    });
+    input.addEventListener('keydown', function(e) { if (e.key === 'Enter') input.blur(); });
+    backdrop.querySelector('.cancel-btn').onclick = function() { dsCloseOverlay_(); };
+    backdrop.addEventListener('click', function(e) { if (e.target === backdrop) dsCloseOverlay_(); });
+    renderResults();
+    // 키보드를 바로 띄워서 입력할 수 있게(이미 찾던 이름이 있으면 결과부터 보여주고 키보드는 안 띄움).
+    if (!saved) setTimeout(function() { input.focus(); }, 300);
+  }
+
+  function jumpToReservation_(res, scanner) {
+    var todayIso = toISO(new Date());
+    var target = parseISO(res.start_date < todayIso ? todayIso : res.start_date);
+    var now = new Date();
+    var curIdx = now.getFullYear() * 12 + now.getMonth();
+    var tIdx = target.getFullYear() * 12 + target.getMonth();
+    // "이번 달" 화면은 오늘~다음 달 말일까지 보여주므로, 그 안이면 이번 달 화면으로 간다.
+    var viewIdx = tIdx <= curIdx + 1 ? curIdx : tIdx;
+    viewMonth = new Date(Math.floor(viewIdx / 12), viewIdx % 12, 1);
+    extraDays = 0;
+    if (scanner && scanner.model && collapsedGroups[scanner.model]) delete collapsedGroups[scanner.model];
+    render(lastData);
+    requestAnimationFrame(function() {
+      var bars = el('gantt').querySelectorAll('.bar[data-res-id]');
+      var bar = null;
+      for (var i = 0; i < bars.length; i++) {
+        if (bars[i].getAttribute('data-res-id') === res.reservation_id) { bar = bars[i]; break; }
+      }
+      if (!bar) return;
+      var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      bar.scrollIntoView({ block: 'center', inline: 'center', behavior: reduce ? 'auto' : 'smooth' });
+      bar.classList.remove('bar-found');
+      void bar.offsetWidth; // 같은 막대를 연달아 찾아도 애니메이션이 다시 시작되게.
+      bar.classList.add('bar-found');
+    });
+  }
+  el('searchBtn').onclick = openSearchSheet_;
+
   // 2026-09-10 사장님 요청 - 긴 안내 문구를 지우고 "?" 아이콘 하나로 숨겨둔다.
   el('guideBtn').onclick = function() {
     showAlert('👆 스캐너 이름(예: 쇼룸 1번)을 누르면 큰 달력으로 더 편하게 예약할 수 있어요.\n\n' +
         '빈 칸(색이 없는 날짜)에서 시작일을 누르고, 이어서 종료일을 누르면 그 기간으로 바로 예약할 수도 있어요.\n\n' +
         '색이 칠해진 막대(이미 있는 예약)를 누르면 삭제할지 물어봐요.\n\n' +
+        '막대를 꾹 누른 채 옆으로 끌면 날짜를 옮길 수 있고, 막대 양 끝을 꾹 누른 채 끌면 기간을 늘리거나 줄일 수 있어요. 그냥 스치듯 밀면 달력이 넘어가요.\n\n' +
+        '돋보기 버튼을 누르면 이름이나 치과명으로 예약을 찾을 수 있어요.\n\n' +
         '모델 이름이 적힌 구분줄을 누르면 그 그룹을 접었다 펼 수 있어요.');
   };
 
@@ -1841,6 +2134,7 @@
         var isReturned = res.status === '반납완료';
         var bar = document.createElement('div');
         bar.className = 'bar ' + (res.status === '대여중' ? 'held' : isReturned ? 'returned' : 'reserved');
+        bar.setAttribute('data-res-id', res.reservation_id);
         // 막대가 짧으면 예약자명이 다 안 들어갈 수 있어서, 안쪽에 말줄임(ellipsis)
         // 전용 span으로 감싼다(2026-09-10 사장님 요청 - "막대 안에 예약자명이나
         // 부서명이 말줄임으로 보이게"). 막대 자체는 overflow:visible이라
