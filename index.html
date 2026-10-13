@@ -395,12 +395,14 @@
       position: relative; margin: 4px 2px; border-radius: 6px; font-size: 11px; font-weight: bold;
       color: #fff; display: flex; align-items: center; padding: 0 8px; overflow: visible;
       min-width: 0; z-index: 2; box-shadow: 0 1px 2px rgba(10,37,64,0.18);
-      /* 막대 몸통을 끌어서 이동할 때(attachMoveHandle) 터치기기에서 화면 자체가
-         옆으로 스크롤돼버려서 드래그가 안 먹는 문제가 있었다(2026-09-11 사장님
-         요청 - "기간 수정할때 달력도 같이 움직여서 안됨"). 손잡이(bar-handle)는
-         이미 touch-action:none으로 이 문제를 막아뒀는데, 막대 몸통 자체(이동용)엔
-         빠져있었다 - 여기도 똑같이 막아야 드래그 중에 달력이 안 움직인다. */
-      touch-action: none;
+      /* 2026-09-11엔 막대 몸통에 touch-action:none을 고정으로 넣어서, 끌어서
+         이동하는 동안 화면이 같이 안 움직이게 했었다. 그런데 이게 "다른 날짜를
+         보려고 막대 위를 스쳐 지나가며 스크롤"하는 것까지 전부 막아버려서,
+         살짝만 스쳐도 화면이 안 움직이고 탭(클릭)으로 처리돼 실수로 삭제창이
+         뜨는 문제가 있었다(2026-10-13 사장님 신고 - "다른 대여를 실수로
+         클릭하게 되는데"). 이제 touch-action은 기본값(스크롤 가능)으로 두고,
+         실제로 꾹 눌러서(롱프레스) 드래그를 시작할 때만 attachMoveHandle이
+         JS로 그때그때 touch-action을 none으로 바꿔준다. */
     }
     /* 막대 자체는 overflow:visible을 유지해야 양쪽 끝 드래그 손잡이(bar-handle,
        막대 바깥으로 살짝 튀어나오게 배치됨)가 잘리지 않는다 - 그래서 말줄임은
@@ -1367,15 +1369,39 @@
   // 다르다. 실제로 옆으로 끌지 않고 그냥 눌렀다 떼기만 하면(클릭) 이동 저장을
   // 하지 않고 그대로 두어서, 막대를 누르면 삭제 확인창이 뜨는 기존 동작(bar.onclick,
   // justDragged 플래그로 구분)이 안 깨지게 한다.
+  // 2026-10-13 버그 수정(사장님 신고 - "모바일에서 달력을 옆으로 넘기려다 다른
+  // 대여를 실수로 클릭하게 됨"): 터치에서는 막대를 짚자마자 바로 드래그 모드로
+  // 들어가던 걸, 약 400ms 동안 "꾹 눌러야"(롱프레스) 드래그가 시작되게 바꿨다.
+  // 그 전에 조금이라도(8px 이상) 움직이면 "날짜를 넘기려는 스크롤"로 보고
+  // 드래그를 포기해서, 화면이 평소처럼 자연스럽게 옆으로 스크롤된다. 마우스/펜은
+  // 스크롤과 부딪힐 일이 없어서 기존처럼 즉시 드래그된다.
   function attachMoveHandle(barEl, scannerId, res, todayStr) {
     barEl.addEventListener('pointerdown', function(e) {
+      var isTouch = e.pointerType === 'touch';
+      var startClientX = e.clientX, startClientY = e.clientY;
+      var dragActive = !isTouch; // 마우스/펜은 바로 드래그, 터치는 롱프레스 확정 후에만.
+      var longPressTimer = null;
+      var cancelled = false;
+
+      function beginDrag() {
+        if (cancelled || dragActive) return;
+        dragActive = true;
+        barEl.style.touchAction = 'none';
+        try { barEl.setPointerCapture(e.pointerId); } catch (err) { /* 이미 손을 뗀 경우 등 - 무시 */ }
+      }
+
+      if (isTouch) {
+        longPressTimer = setTimeout(beginDrag, 400);
+      } else {
+        barEl.setPointerCapture(e.pointerId);
+      }
+
       var startX = e.clientX;
       var origStart = res.start_date, origEnd = res.end_date;
       var spanDays = Math.round((parseISO(origEnd) - parseISO(origStart)) / 86400000);
       var curStart = origStart, curEnd = origEnd;
       var moved = false;
       var origLabel = barEl.textContent;
-      barEl.setPointerCapture(e.pointerId);
 
       function updateBarVisual() {
         var s2 = Math.max(dayIndex(curStart, windowStart), 0);
@@ -1391,6 +1417,19 @@
       }
 
       function onMove(ev) {
+        if (!dragActive) {
+          // 롱프레스가 아직 확정되지 않은 터치 - 조금이라도(8px 이상) 움직이면
+          // "날짜를 넘기려는 스크롤"로 보고 드래그 시도 자체를 그만둔다(타이머
+          // 취소 + 리스너 정리). preventDefault를 안 불렀으니 화면은 그대로
+          // 자연스럽게 스크롤된다.
+          if (Math.abs(ev.clientX - startClientX) > 8 || Math.abs(ev.clientY - startClientY) > 8) {
+            cancelled = true;
+            if (longPressTimer) clearTimeout(longPressTimer);
+            document.removeEventListener('pointermove', onMove);
+            document.removeEventListener('pointerup', onUp);
+          }
+          return;
+        }
         var deltaDays = Math.round((ev.clientX - startX) / COL_W);
         if (deltaDays === 0 && !moved) return;
         if (!moved) {
@@ -1444,9 +1483,11 @@
       // 실수로 스친 드래그는 취소/바깥 클릭/뒤로가기 아무거나로 막히고(전부
       // 원래 자리로 되돌림), 진짜 옮기려는 경우만 "이동" 버튼을 눌러 저장된다.
       function onUp() {
+        if (longPressTimer) clearTimeout(longPressTimer);
         document.removeEventListener('pointermove', onMove);
         document.removeEventListener('pointerup', onUp);
-        if (!moved || (curStart === origStart && curEnd === origEnd)) {
+        barEl.style.touchAction = ''; // 다음 번 터치부터는 다시 기본값(스크롤 가능)으로.
+        if (!dragActive || !moved || (curStart === origStart && curEnd === origEnd)) {
           if (moved) { barEl.classList.remove('bar-dragging'); updateBarVisualToOriginal(); }
           return; // 실제로 안 옮겨졌으면(클릭이었거나 제자리) 그대로 둔다.
         }
