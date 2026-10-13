@@ -514,6 +514,37 @@
   var DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
   var MONTH_LABELS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
   var COL_W = 40, LABEL_W = 130, ROW_H = 46, HEAD_H = 50, DIVIDER_H = 24;
+  // 장비명 칸(.gantt-labels) 너비를 고정 130px로 두지 않고, 실제로 들어갈
+  // 글자(장비명/시리얼/그룹명) 중 가장 긴 것에 딱 맞춰 매번 다시 계산한다
+  // (2026-10-13 사장님 요청 - "모바일에서 왼쪽 칸이 너무 넓다, 글자 사이드에
+  // 딱 맞게 블럭 사이즈를 줄여줘"). 고정값이었을 때는 좁은 휴대폰 화면에서
+  // 이 칸이 달력 보이는 영역을 너무 많이 잡아먹었다.
+  var labelMeasureCtx = document.createElement('canvas').getContext('2d');
+  function labelTextWidth_(text, font) {
+    labelMeasureCtx.font = font;
+    return labelMeasureCtx.measureText(text).width;
+  }
+  function measureLabelWidth_(rows) {
+    var FONT_NAME = '700 12.5px Pretendard, -apple-system, "Malgun Gothic", sans-serif';
+    var FONT_SUB = '500 10.5px Pretendard, -apple-system, "Malgun Gothic", sans-serif';
+    var FONT_DIVIDER = '800 11px Pretendard, -apple-system, "Malgun Gothic", sans-serif';
+    var maxW = 0;
+    rows.forEach(function(r) {
+      if (r.type === 'divider') {
+        var dw = 9 + 6 + labelTextWidth_(r.model, FONT_DIVIDER); // 화살표 아이콘 + 간격
+        if (dw > maxW) maxW = dw;
+      } else {
+        var s = r.data;
+        var nameW = labelTextWidth_(s.label, FONT_NAME);
+        var subText = s.scanner_id + (s.maintenance ? ' · 🔧 점검중' : '');
+        var subW = labelTextWidth_(subText, FONT_SUB);
+        var w = Math.max(nameW, subW);
+        if (w > maxW) maxW = w;
+      }
+    });
+    var padded = Math.ceil(maxW) + 24; // 좌우 패딩(10px*2) + 테두리/여유분
+    return Math.max(74, Math.min(padded, 220));
+  }
   // 2주 단위 대신 달력 한 달 전체를 보여준다(2026-09-09 사장님 요청). 그 달의
   // 실제 일수(28~31일)는 render()에서 매번 다시 계산한다.
   var WINDOW_DAYS = 30;
@@ -1654,6 +1685,7 @@
     // 가로 스크롤은 .gantt 쪽에만 걸리고 .gantt-labels는 아예 안 움직인다
     // (2026-10-08). 두 그리드의 세로 줄 높이(gridTemplateRows)는 반드시
     // 똑같이 맞춰줘야 행끼리 나란히 보인다.
+    LABEL_W = measureLabelWidth_(rows);
     gantt.style.gridTemplateColumns = 'repeat(' + WINDOW_DAYS + ', ' + COL_W + 'px)';
     gantt.style.gridTemplateRows = rowHeightsStr;
     ganttLabels.style.gridTemplateColumns = LABEL_W + 'px';
