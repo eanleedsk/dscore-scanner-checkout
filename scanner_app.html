@@ -546,10 +546,19 @@
     // 따로 막아준다 - findOverlappingReservation_). 날짜를 아직 안 골랐을 때
     // (예: QR로 들어와 바로 수령확인하는 경우)는 기존대로 동작한다.
     if (state.startDate && state.endDate && s.start_date && s.expected_return) {
-      var overlaps = state.startDate <= s.expected_return && s.start_date <= state.endDate;
+      // 2026-10-14 - 반납예정일이 지났는데 아직 안 돌아온(연체) 장비는 오늘까지
+      // 쓰고 있는 것으로 본다(서버 effectiveEnd_와 같은 기준). 그래야 오늘 날짜로
+      // 고르면 "지금 대여하기" 대신 그 연체 예약의 반납 버튼이 나온다.
+      var blockEnd = s.overdue && s.expected_return < localTodayISO_() ? localTodayISO_() : s.expected_return;
+      var overlaps = state.startDate <= blockEnd && s.start_date <= state.endDate;
       if (!overlaps) return null;
     }
     return s;
+  }
+  // 한국 시간 기준 오늘(toISOString은 세계표준시라 오전 9시 전엔 어제 날짜가 나온다).
+  function localTodayISO_() {
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
   function renderProgressSteps() {
