@@ -29,6 +29,7 @@
       --held: #4A7FD1; --held-bg: #E7EFFC;
       --reserved: #D99A34; --reserved-bg: #FBF0DC;
       --returned: #5B9B6B; --returned-bg: #E8F3EA;
+      --overdue: #C9433A; --overdue-bg: #FBE6E4;
       --today: rgba(234,118,0,0.09);
       --holiday-tint: rgba(194,59,50,0.055);
       --maint: #7C5CBF; --maint-bg: #F1EAFB;
@@ -107,6 +108,8 @@
     .chip-reserved i { background: var(--reserved); }
     .chip-today { background: var(--today); color: var(--brand-dark); }
     .chip-today i { background: var(--brand); }
+    .chip-overdue { background: var(--overdue-bg); color: var(--overdue); }
+    .chip-overdue i { background: var(--overdue); }
     .guide-btn {
       width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--border);
       background: var(--surface); color: var(--muted); font-size: 12.5px; font-weight: 800;
@@ -456,6 +459,13 @@
     }
     .bar.held { background: var(--held); }
     .bar.reserved { background: var(--reserved); }
+    /* 2026-10-14 사장님 요청 - 반납예정일이 지났는데 아직 반납 안 된 예약은
+       반납될 때까지 "오늘까지" 이어지는 빨간 막대로 계속 보여준다(전엔 반납예정일
+       다음 날부터 달력에서 사라져서 장비가 비어 있는 것처럼 보였음). */
+    .bar.overdue {
+      background: repeating-linear-gradient(135deg, var(--overdue) 0 8px, #B83A32 8px 16px);
+      cursor: pointer;
+    }
     /* 2026-10-08 추가 - 일찍 반납해도 달력에서 바로 사라지지 않고, 실제로 쓴
        기간이 다른 색(완료 표시)으로 남아있는다(사장님 요청). 이미 끝난 일이라
        옅게 처리하고, 손잡이/드래그/클릭 삭제가 전부 안 먹는 걸 커서로도 보여준다. */
@@ -510,6 +520,7 @@
     <div class="legend-chips">
       <span class="chip chip-held"><i></i>대여중</span>
       <span class="chip chip-reserved"><i></i>예약됨</span>
+      <span class="chip chip-overdue"><i></i>연체</span>
       <span class="chip chip-today"><i></i>오늘</span>
     </div>
     <button class="guide-btn search-btn" id="searchBtn" type="button" aria-label="예약 찾기" title="예약 찾기">
@@ -681,7 +692,7 @@
     while (cursor <= endDate) {
       var iso = toISO(cursor);
       for (var i = 0; i < list.length; i++) {
-        if (iso >= list[i].start_date && iso <= list[i].end_date) return false;
+        if (iso >= list[i].start_date && iso <= (list[i].blockEnd || list[i].end_date)) return false;
       }
       cursor = addDays(cursor, 1);
     }
@@ -808,7 +819,7 @@
       var list = lastByScanner[scannerId] || [];
       for (var i = 0; i < list.length; i++) {
         if (list[i].status === '반납완료') continue;
-        if (iso >= list[i].start_date && iso <= list[i].end_date) return list[i];
+        if (iso >= list[i].start_date && iso <= (list[i].blockEnd || list[i].end_date)) return list[i];
       }
       return null;
     }
@@ -1080,7 +1091,7 @@
       '<div class="confirm-sheet">' +
         '<h3>' + scannerLabel + ' 예약</h3>' +
         '<p>' + res.employee_name + '님' + ((res.start_time && res.end_time) ? (' ' + res.start_time + '~' + res.end_time) : '') +
-          ' · ' + res.start_date + ' ~ ' + res.end_date + ' (' + res.status + ')</p>' +
+          ' · ' + res.start_date + ' ~ ' + res.end_date + ' (' + (res.overdue ? '반납예정일 지남' : res.status) + ')</p>' +
         '<div class="stepper-field">' +
           '<div class="field-label">예약자 이름</div>' +
           '<input type="text" id="inlineEditName" maxlength="60">' +
@@ -1728,7 +1739,7 @@
         res: r,
         scanner: scannerById[r.scanner_id] || { model: '', label: r.scanner_id },
         known: known,
-        // 반납예정일이 지났는데 아직 반납 안 된 건 - 달력은 오늘부터 보여주므로 막대가 안 보인다.
+        // 반납예정일이 지났는데 아직 반납 안 된 건 - 결과에 "연체"로 표시한다.
         overdue: r.status === '대여중' && r.end_date < todayIso,
       };
     });
@@ -1741,17 +1752,7 @@
           '구글시트 "스캐너목록"에서 장비 코드가 바뀌었거나 빠졌는지 확인해주세요.', { tone: 'warn' });
       return;
     }
-    if (f.overdue) {
-      showConfirm('반납예정일(' + r.end_date + ')이 지났는데 아직 반납되지 않은 예약이에요.\n' +
-          '지난 날짜라 달력에는 안 보여요. 대여 화면에서 반납하거나 기간을 수정할까요?',
-          function() {
-            navigateWithFade('scanner_app.html?scanner_id=' + encodeURIComponent(r.scanner_id) +
-                '&start_date=' + encodeURIComponent(r.start_date) + '&end_date=' + encodeURIComponent(r.end_date) +
-                '&focus=edit');
-          },
-          { okText: '대여 화면으로', cancelText: '닫기' });
-      return;
-    }
+    // 연체 건도 이제 달력에 "오늘까지" 빨간 막대로 보이므로(2026-10-14) 그대로 이동한다.
     jumpToReservation_(r, f.scanner);
   }
 
@@ -1861,6 +1862,7 @@
         '색이 칠해진 막대(이미 있는 예약)를 누르면 삭제할지 물어봐요.\n\n' +
         '막대를 꾹 누른 채 옆으로 끌면 날짜를 옮길 수 있고, 막대 양 끝을 꾹 누른 채 끌면 기간을 늘리거나 줄일 수 있어요. 그냥 스치듯 밀면 달력이 넘어가요.\n\n' +
         '돋보기 버튼을 누르면 이름이나 치과명으로 예약을 찾을 수 있어요.\n\n' +
+        '빨간 줄무늬 막대는 반납예정일이 지났는데 아직 반납 안 된(연체) 예약이에요. 반납될 때까지 오늘까지 이어져 보이고, 누르면 바로 반납할 수 있어요.\n\n' +
         '모델 이름이 적힌 구분줄을 누르면 그 그룹을 접었다 펼 수 있어요.');
   };
 
@@ -1922,6 +1924,12 @@
 
     var byScanner = {};
     reservations.forEach(function(r) {
+      // 연체(반납예정일이 지났는데 아직 대여중) 건은 장비가 아직 안 돌아온 것이라
+      // 오늘까지 쓰는 중으로 본다(2026-10-14) - 막대도 오늘까지 그리고, 오늘 칸은
+      // 빈 날짜로 안 보이게 한다. blockEnd는 화면 계산용일 뿐, 실제 반납예정일
+      // (end_date)은 그대로 둔다(기간 수정·반납 처리는 원래 값 기준).
+      r.overdue = r.status === '대여중' && r.end_date < todayStr;
+      r.blockEnd = r.overdue ? todayStr : r.end_date;
       (byScanner[r.scanner_id] = byScanner[r.scanner_id] || []).push(r);
     });
     lastByScanner = byScanner;
@@ -2099,7 +2107,7 @@
       var myBlockingReservations = myReservations.filter(function(x) { return x.status !== '반납완료'; });
       function isDateFree(iso) {
         for (var i = 0; i < myBlockingReservations.length; i++) {
-          if (iso >= myBlockingReservations[i].start_date && iso <= myBlockingReservations[i].end_date) return false;
+          if (iso >= myBlockingReservations[i].start_date && iso <= myBlockingReservations[i].blockEnd) return false;
         }
         return true;
       }
@@ -2127,14 +2135,38 @@
 
       (byScanner[s.scanner_id] || []).forEach(function(res) {
         var startIdx = dayIndex(res.start_date, windowStart);
-        var endIdx = dayIndex(res.end_date, windowStart); // 포함(inclusive) 마지막 날
+        var endIdx = dayIndex(res.blockEnd || res.end_date, windowStart); // 포함(inclusive) 마지막 날
         var clipStart = Math.max(startIdx, 0);
         var clipEnd = Math.min(endIdx, WINDOW_DAYS - 1);
         if (clipStart > clipEnd) return; // 이 창(window) 밖 기간
         var isReturned = res.status === '반납완료';
         var bar = document.createElement('div');
-        bar.className = 'bar ' + (res.status === '대여중' ? 'held' : isReturned ? 'returned' : 'reserved');
+        bar.className = 'bar ' + (res.overdue ? 'overdue' : res.status === '대여중' ? 'held' : isReturned ? 'returned' : 'reserved');
         bar.setAttribute('data-res-id', res.reservation_id);
+
+        // 연체 막대(2026-10-14) - 누르면 다른 대여중 막대와 똑같이 반납 창이 뜬다.
+        // 끌어서 옮기기/양 끝 손잡이는 안 붙인다(이미 지난 반납예정일 기준으로
+        // 계산돼서 헷갈리기 때문 - 기간을 늘리려면 반납 창의 기간 수정을 쓴다).
+        if (res.overdue) {
+          var lateDays = Math.round((parseISO(todayStr) - parseISO(res.end_date)) / 86400000);
+          var odLabel = document.createElement('span');
+          odLabel.className = 'bar-label';
+          odLabel.textContent = '연체 ' + lateDays + '일 · ' + res.employee_name;
+          // 오늘 하루 칸만 보이는 좁은 막대면 "연..."으로 잘리지 않게 "연체"만 가운데에.
+          if (clipEnd === clipStart) {
+            odLabel.textContent = '연체';
+            bar.style.padding = '0 4px';
+            bar.style.justifyContent = 'center';
+          }
+          bar.appendChild(odLabel);
+          bar.title = res.employee_name + ' · ' + res.start_date + ' ~ ' + res.end_date +
+              ' (반납예정일 ' + lateDays + '일 지남, 아직 반납 안 됨) · 눌러서 반납';
+          bar.onclick = (function(scannerId, scannerLabel, res, barEl) {
+            return function() { showDeleteConfirmSheet(scannerId, scannerLabel, res, barEl); };
+          })(s.scanner_id, s.label, res, bar);
+          place(bar, row, clipStart + 1, clipEnd + 2);
+          return;
+        }
         // 막대가 짧으면 예약자명이 다 안 들어갈 수 있어서, 안쪽에 말줄임(ellipsis)
         // 전용 span으로 감싼다(2026-09-10 사장님 요청 - "막대 안에 예약자명이나
         // 부서명이 말줄임으로 보이게"). 막대 자체는 overflow:visible이라
