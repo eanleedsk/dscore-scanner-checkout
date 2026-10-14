@@ -1052,8 +1052,11 @@
     // 이 예약을 처리할 수 있게 됨.
     var active = activeReservationForSelectedScanner();
     var baseReady = !!(state.selectedScanner && state.selectedEmployee) && !state.busy;
+    // 2026-10-14 - "수령확인"을 안 누른 채 반납예정일까지 지난(연체) 예약은 이미
+    // 가져간 것으로 보므로(서버와 같은 기준), 수령확인/예약취소 대신 반납 버튼을 보여준다.
+    var overdueUnconfirmed = !!(active && active.status === 'reserved' && active.overdue);
 
-    if (active && active.status === 'reserved') {
+    if (active && active.status === 'reserved' && !overdueUnconfirmed) {
       // 2026-09-08 사장님 요청으로 사진은 더 이상 필수가 아니다 - 장비를 이미
       // 골라서 예약해둔 상태이므로 사진 없이도 수령 확인이 가능하다.
       var pickupReady = baseReady;
@@ -1061,7 +1064,7 @@
       box.appendChild(makeBtn('예약 취소', 'danger', state.busy, doReturn));
       box.appendChild(makeBtn('기간 수정', 'secondary', state.busy, openEditPanel));
       appendFutureReserveButtonIfFree_(box, baseReady);
-    } else if (active && active.status === 'held') {
+    } else if (active && (active.status === 'held' || overdueUnconfirmed)) {
       box.appendChild(makeBtn(state.busy ? '처리 중...' : '반납', 'primary', state.busy, doReturn));
       box.appendChild(makeBtn('기간 수정', 'secondary', state.busy, openEditPanel));
       appendFutureReserveButtonIfFree_(box, baseReady);
@@ -1339,6 +1342,7 @@
       // 최신 목록/정렬로 다시 그려두므로, 펼칠 때는 그 내용이 바로 최신 상태.
       renderAll();
       maybeAutoOpenEdit();
+      maybeFocusReturn();
       el('rangeCheckingHint').classList.add('hidden');
       if (!firstConfigLoadDone) { onFirstLoadDone_(); }
     }).catch(function(err) {
@@ -1416,6 +1420,20 @@
     if (!target) return;
     state.editIntentDone = true;
     openEditPanel();
+  }
+
+  // 연체 안내 메일의 "반납 처리하러 가기" 링크(focus=return)로 들어온 경우 -
+  // 반납 버튼이 있는 곳으로 스크롤하고 잠깐 깜빡여 알려준다(2026-10-14 사장님 요청 -
+  // "사이트 링크를 첨부해서 반납 처리를 해달라고 안내해줘").
+  function maybeFocusReturn() {
+    if (qsFocus !== 'return' || state.returnFocusDone) return;
+    if (!activeReservationForSelectedScanner()) return;
+    var btn = el('actionButtons').firstChild;
+    if (!btn) return;
+    state.returnFocusDone = true;
+    btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    btn.classList.add('highlight-pulse');
+    setTimeout(function() { btn.classList.remove('highlight-pulse'); }, 2400);
   }
 </script>
 </body>
