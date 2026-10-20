@@ -1969,6 +1969,28 @@
         });
         if (group.length > maxLanes) maxLanes = group.length;
       });
+      // 2026-10-20 사장님 신고 - "사이트에서는 연체 항목이 대여중인거랑 겹쳐서 안보이는데".
+      // 앞사람이 반납을 안 누른 채 다음 사람이 이미 가져가면, 오늘까지 이어지는 연체 막대와
+      // 다음 사람 막대가 같은 날짜에 겹쳐서 뒤에 그린 막대에 가려졌다. 그런 줄은 칸을 위아래로
+      // 나눠 연체 막대를 위쪽부터 한 줄씩, 나머지 예약은 맨 아래 줄에 그려 둘 다 보이게 한다.
+      var overdueList = list.filter(function(x) { return x.overdue; });
+      var overdueClash = overdueList.length > 1 || overdueList.some(function(o) {
+        return list.some(function(x) {
+          return !x.overdue && x.start_date <= o.blockEnd && o.start_date <= x.blockEnd;
+        });
+      });
+      if (overdueClash) {
+        overdueList.forEach(function(o, i) {
+          laneMap[o.reservation_id] = i;
+          laneGroupSize[o.reservation_id] = overdueList.length + 1;
+        });
+        list.forEach(function(x) {
+          if (x.overdue) return;
+          laneMap[x.reservation_id] = overdueList.length;
+          laneGroupSize[x.reservation_id] = overdueList.length + 1;
+        });
+        maxLanes = Math.max(maxLanes, overdueList.length + 1);
+      }
       r.laneMap = laneMap;
       r.laneGroupSize = laneGroupSize;
       r.maxLanes = maxLanes;
@@ -2165,6 +2187,13 @@
             return function() { showDeleteConfirmSheet(scannerId, scannerLabel, res, barEl); };
           })(s.scanner_id, s.label, res, bar);
           place(bar, row, clipStart + 1, clipEnd + 2);
+          // 다른 예약과 겹치는 줄이면 위쪽 칸에 그린다(위 overdueClash 참고).
+          if ((r.laneGroupSize[res.reservation_id] || 1) > 1) {
+            var laneOd = r.laneMap[res.reservation_id] || 0;
+            bar.style.alignSelf = 'start';
+            bar.style.height = (LANE_H - 4) + 'px';
+            bar.style.margin = (4 + laneOd * LANE_H) + 'px 2px 0 2px';
+          }
           return;
         }
         // 막대가 짧으면 예약자명이 다 안 들어갈 수 있어서, 안쪽에 말줄임(ellipsis)
