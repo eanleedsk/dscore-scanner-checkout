@@ -134,12 +134,14 @@
        버튼을 대신 보여준다 - 버튼을 누르면 숨겨둔 진짜 날짜칸의 달력을
        코드로 띄운다(openDatePicker 참고). 이러면 사파리가 내부적으로 뭘
        하든 화면에 안 보이니 튀어나올 수가 없다. */
-    input.name-input {
+    .sub-label { font-size: 11.5px; color: var(--muted); margin-bottom: 4px; font-weight: 600; }
+    select.name-input { background-color: #fff; color: inherit; }
+    input.name-input, select.name-input {
       font-family: inherit; font-size: 14px; padding: 0 12px; height: 44px;
       line-height: 44px; border-radius: 9px; border: 1.5px solid var(--border);
       width: 100%; box-sizing: border-box; background: var(--surface); color: var(--text);
     }
-    input.name-input:focus { outline: none; border-color: var(--brand); }
+    input.name-input:focus, select.name-input:focus { outline: none; border-color: var(--brand); }
     /* 2026-10-08부터 날짜칸은 숨긴 input + 스타일만 입힌 버튼(showPicker() 호출)
        조합을 버리고, 진짜 input[type=date]를 그대로 보여준다(사장님이 반복
        신고 - "모바일에서 날짜 수정이 안 됨", 여러 번 재현 시도했지만 원인을 못
@@ -353,8 +355,15 @@
 
 <div class="card" id="employeeCard">
   <div class="label">🙋 예약자 정보</div>
-  <input type="text" id="employeeInput" class="name-input"
-         placeholder="이름을 입력해주세요 (예: Ean)" autocomplete="off">
+  <!-- 2026-11-12 사장님 요청 - 이름과 치과명을 한 칸에 섞어 적으면 메일이 엉뚱한
+       사람에게 가거나 안 가서, "담당자"(목록에서 선택)와 "치과/행사명"을 따로 받는다. -->
+  <div class="sub-label">담당자</div>
+  <select id="renterSelect" class="name-input" aria-label="담당자 선택"></select>
+  <input type="text" id="employeeInput" class="name-input hidden" style="margin-top:8px;"
+         placeholder="담당자 이름을 입력해주세요" autocomplete="off" aria-label="담당자 이름 직접 입력">
+  <div class="sub-label" style="margin-top:12px;">치과 / 행사명 (선택)</div>
+  <input type="text" id="placeInput" class="name-input"
+         placeholder="예: 인생플란트치과, 대구 세미나" autocomplete="off" aria-label="치과 또는 행사명">
 </div>
 
 <div class="card">
@@ -446,6 +455,12 @@
     scanners: [],
     selectedScanner: qsParams.get('scanner_id') || null,
     selectedEmployee: null,
+    // 담당자/치과·행사명(2026-11-12). selectedEmployee는 이 둘을 합친 화면 표시용 이름
+    // ("Moon (인생플란트치과)")으로 자동 계산된다 - 기존 로직은 그 값을 그대로 쓴다.
+    employees: [],
+    renter: '',
+    renterCustom: false,
+    place: '',
     startDate: qsStartDate || todayISO(),
     endDate: qsEndDate || '',
     // 시간 단위 예약(2026-09-10 사장님 요청) - useTime이 꺼져 있으면 예전처럼
@@ -672,7 +687,7 @@
     var active = activeReservationForSelectedScanner();
     // 2026-09-08 사장님 요청 - "장비 선택만으로도 대여할 수 있게": 사진은 어느
     // 경우든 필수가 아니라 항상 선택사항이다.
-    el('photoCard').classList.toggle('hidden', active && active.status === 'held');
+    el('photoCard').classList.toggle('hidden', !!(active && active.status === 'held' && !active.overdue));
     el('photoCardLabel').textContent = active ? '📷 수령 확인 사진 (선택사항)' : '📷 장비 사진 (선택사항)';
     renderPhotoStepper();
   }
@@ -747,7 +762,7 @@
     resetPhoto_();
     renderPhotoCard();
     el('employeeCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    el('employeeInput').focus();
+    el('renterSelect').focus();
   };
 
   function resetPhoto_() {
@@ -791,11 +806,11 @@
     } else if (active && active.status === 'held') {
       doReturn();
     } else {
-      doReserve();
+      doReserve(false);
     }
   }
 
-  function doReserve() {
+  function doReserve(closePrev) {
     if (!state.selectedScanner || !state.selectedEmployee || !state.startDate || !state.endDate) {
       showMsg(errorText('missing_fields'), 'error'); return;
     }
@@ -820,6 +835,9 @@
       action: 'reserve',
       scanner_id: state.selectedScanner,
       employee_name: state.selectedEmployee,
+      renter_name: state.renter,
+      place_name: state.place,
+      close_previous: closePrev === true,
       start_date: state.startDate,
       end_date: state.endDate,
       start_time: state.useTime ? state.startTime : '',
@@ -828,7 +846,12 @@
       photo_parts_base64: state.photos.parts || '',
       note: buildNote(),
       source: requestSource,
-    }).then(function(res) { handleActionResult('reserve', res); })
+    }).then(function(res) {
+      if (res && res.status === 'ok') {
+        try { localStorage.setItem(LAST_RENTER_KEY, JSON.stringify({ renter: state.renter, custom: state.renterCustom })); } catch (e) { /* 무시 */ }
+      }
+      handleActionResult('reserve', res);
+    })
       .catch(function(err) {
         state.busy = false;
         // 응답을 못 받았어도 실제로는 서버에서 처리됐을 수 있다(2026-09-11 실제
@@ -854,9 +877,28 @@
       });
   }
 
-  function doConfirmPickup() {
+  // ---- 앞 예약 함께 반납(2026-11-12 사장님 요청 - "다음 사람이 가져갈 때 앞사람 자동 반납") ----
+  // 장비는 돌려놨는데 "반납"을 안 눌러 연체로 남은 앞 예약이 있으면, 다음 사람이
+  // 수령확인/반납/대여할 때 같이 반납 처리할지 물어본다. 예 → proceed(true),
+  // 그대로 두기 → proceed(false), 창을 그냥 닫으면 아무것도 안 한다.
+  function staleOthers_(scanner, exceptId) {
+    return ((scanner && scanner.unreturned_overdue) || []).filter(function(x) { return x.reservation_id !== exceptId; });
+  }
+  function staleLines_(stale) {
+    return stale.map(function(x) { return '· ' + x.employee_name + ' (' + x.start_date + ' ~ ' + x.end_date + ')'; }).join('\n');
+  }
+  function askClosePrevious_(stale, proceed) {
+    showConfirm('이 장비에 반납예정일이 지났는데 아직 반납 처리가 안 된 앞 예약이 있어요.\n' + staleLines_(stale) +
+        '\n\n장비가 실제로 돌아와 있다면, 앞 예약도 함께 반납 처리할까요?',
+        function() { proceed(true); },
+        { okText: '함께 반납 처리', cancelText: '그대로 두기', onCancel: function() { proceed(false); } });
+  }
+
+  function doConfirmPickup(closePrev) {
     var active = activeReservationForSelectedScanner();
     if (!active) return;
+    var stalePickup = staleOthers_(active, active.reservation_id);
+    if (closePrev !== true && closePrev !== false && stalePickup.length) { askClosePrevious_(stalePickup, doConfirmPickup); return; }
     state.busy = true;
     renderActionButtons();
     var hasAnyPhoto = !!(state.photos.overall || state.photos.parts);
@@ -864,6 +906,7 @@
     postJson('confirm_pickup', {
       action: 'confirm_pickup',
       reservation_id: active.reservation_id,
+      close_previous: closePrev === true,
       photo_overall_base64: state.photos.overall || '',
       photo_parts_base64: state.photos.parts || '',
       note: buildNote(),
@@ -875,15 +918,18 @@
   // 2026-09-09 사장님 요청 - "관리자 모드도 없애줘": 반납/취소도 이제 본인 확인
   // 없이 누구나 할 수 있다. 그 예약의 원래 이름을 그대로 실어 보내서(관리자
   // 비밀번호 없이도) 서버 쪽 검사를 통과시킨다.
-  function doReturn() {
+  function doReturn(closePrev) {
     var target = activeReservationForSelectedScanner();
     if (!target) return;
+    var staleReturn = staleOthers_(target, target.reservation_id);
+    if (closePrev !== true && closePrev !== false && staleReturn.length) { askClosePrevious_(staleReturn, doReturn); return; }
     state.busy = true;
     renderActionButtons();
     showMsg('처리 중입니다...', 'checking');
     postJson('return', {
       action: 'return',
       reservation_id: target.reservation_id,
+      close_previous: closePrev === true,
       note: buildNote(),
       employee_name: target.holder || '',
       source: requestSource,
@@ -1061,12 +1107,23 @@
       // 골라서 예약해둔 상태이므로 사진 없이도 수령 확인이 가능하다.
       var pickupReady = baseReady;
       box.appendChild(makeBtn(state.busy ? '처리 중...' : '수령 확인(대여 시작)', 'primary', !pickupReady, function() { doMainAction(); }));
-      box.appendChild(makeBtn('예약 취소', 'danger', state.busy, doReturn));
+      box.appendChild(makeBtn('예약 취소', 'danger', state.busy, function() { doReturn(false); }));
       box.appendChild(makeBtn('기간 수정', 'secondary', state.busy, openEditPanel));
       appendFutureReserveButtonIfFree_(box, baseReady);
     } else if (active && (active.status === 'held' || overdueUnconfirmed)) {
-      box.appendChild(makeBtn(state.busy ? '처리 중...' : '반납', 'primary', state.busy, doReturn));
+      box.appendChild(makeBtn(state.busy ? '처리 중...' : '반납', 'primary', state.busy, function() { doReturn(); }));
       box.appendChild(makeBtn('기간 수정', 'secondary', state.busy, openEditPanel));
+      // 앞사람이 반납을 안 누른 채 장비만 돌려놓은 경우(연체 표시) - 다음 사람이
+      // 담당자·반납예정일을 채우면 "앞 예약 반납 처리 + 내 대여"를 한 번에 할 수 있다.
+      if (active.overdue) {
+        var takeReady = baseReady && !!state.endDate && state.startDate <= localTodayISO_();
+        box.appendChild(makeBtn('앞 예약 반납 처리하고 내가 대여', 'secondary', !takeReady, function() {
+          showConfirm('아래 앞 예약을 반납 처리하고, ' + state.selectedEmployee + '님 이름으로 ' + state.startDate + ' ~ ' +
+              state.endDate + ' 대여를 시작할까요?\n' + staleLines_(staleOthers_(active, '')) +
+              '\n\n장비가 실제로 돌아와 있을 때만 눌러주세요.',
+              function() { doReserve(true); }, { okText: '반납 처리하고 대여', cancelText: '취소' });
+        }));
+      }
       appendFutureReserveButtonIfFree_(box, baseReady);
     } else {
       // 점검/수리중으로 표시된 장비는 새로 대여/예약할 수 없다(2026-09-10 사장님
@@ -1113,10 +1170,47 @@
     });
   });
 
-  el('employeeInput').addEventListener('input', function(e) {
-    state.selectedEmployee = e.target.value.trim() || null;
+  // ---- 담당자(목록 선택) + 치과/행사명(2026-11-12) ----
+  var CUSTOM_RENTER = '__custom__';
+  var LAST_RENTER_KEY = 'dsLastRenter';
+  function escAttr_(t) { return String(t).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+  function renderRenterSelect_() {
+    var sel = el('renterSelect');
+    var names = state.employees || [];
+    var html = '<option value="">담당자를 선택해주세요</option>';
+    names.forEach(function(nm) { html += '<option value="' + escAttr_(nm) + '">' + escAttr_(nm) + '</option>'; });
+    html += '<option value="' + CUSTOM_RENTER + '">목록에 없음 (직접 입력)</option>';
+    sel.innerHTML = html;
+    // 목록에 없는 이름이 이미 들어와 있으면(임시저장 복원 등) 직접 입력으로 보여준다.
+    if (state.renter && !state.renterCustom && names.indexOf(state.renter) < 0) state.renterCustom = true;
+    sel.value = state.renterCustom ? CUSTOM_RENTER : (state.renter || '');
+    el('employeeInput').classList.toggle('hidden', !state.renterCustom);
+    if (state.renterCustom) el('employeeInput').value = state.renter || '';
+    el('placeInput').value = state.place || '';
+  }
+  function syncEmployee_() {
+    state.renter = state.renterCustom ? el('employeeInput').value.trim() : (el('renterSelect').value || '');
+    if (state.renter === CUSTOM_RENTER) state.renter = '';
+    state.place = el('placeInput').value.trim();
+    state.selectedEmployee = state.renter ? (state.renter + (state.place ? ' (' + state.place + ')' : '')) : null;
+    renderProgressSteps();
     renderActionButtons();
+  }
+  el('renterSelect').addEventListener('change', function(e) {
+    state.renterCustom = e.target.value === CUSTOM_RENTER;
+    el('employeeInput').classList.toggle('hidden', !state.renterCustom);
+    if (state.renterCustom) { el('employeeInput').value = ''; el('employeeInput').focus(); }
+    syncEmployee_();
   });
+  el('employeeInput').addEventListener('input', syncEmployee_);
+  el('placeInput').addEventListener('input', syncEmployee_);
+  // 이 기기에서 지난번에 고른 담당자를 기억해뒀다가 미리 골라준다(자주 쓰는 사람 편의).
+  (function restoreLastRenter() {
+    try {
+      var last = JSON.parse(localStorage.getItem(LAST_RENTER_KEY) || 'null');
+      if (last && last.renter) { state.renter = last.renter; state.renterCustom = !!last.custom; }
+    } catch (e) { /* 저장소 막힘 - 무시 */ }
+  })();
   // 시간 지정 토글은 시작일=반납예정일(하루)일 때만 의미가 있다(2026-09-10
   // 사장님 요청). 날짜 범위로 바뀌면 자동으로 꺼서, "여러 날짜인데 시간까지
   // 지정된" 앞뒤가 안 맞는 상태가 안 생기게 한다.
@@ -1246,6 +1340,7 @@
         savedAt: Date.now(),
         selectedScanner: state.selectedScanner,
         selectedEmployee: state.selectedEmployee,
+        renter: state.renter, renterCustom: state.renterCustom, place: state.place,
         startDate: state.startDate,
         endDate: state.endDate,
         useTime: state.useTime,
@@ -1274,6 +1369,15 @@
   function applyDraft_(draft) {
     state.selectedScanner = draft.selectedScanner || null;
     state.selectedEmployee = draft.selectedEmployee || null;
+    // 예전 방식 임시저장(이름 한 칸)이면 그 이름을 직접 입력 담당자로 넣어준다.
+    if ('renter' in draft) {
+      state.renter = draft.renter || '';
+      state.renterCustom = !!draft.renterCustom;
+    } else if (draft.selectedEmployee) {
+      state.renter = draft.selectedEmployee;
+      state.renterCustom = true;
+    }
+    state.place = draft.place || '';
     state.startDate = draft.startDate || state.startDate;
     state.endDate = draft.endDate || '';
     state.useTime = !!draft.useTime;
@@ -1287,7 +1391,8 @@
     el('endDateInput').value = state.endDate || '';
     syncDateDisplay_('startDateInput', 'startDateDisplay');
     syncDateDisplay_('endDateInput', 'endDateDisplay');
-    if (state.selectedEmployee) el('employeeInput').value = state.selectedEmployee;
+    renderRenterSelect_();
+    syncEmployee_();
     el('noteInput').value = draft.note || '';
     updateTimeToggleVisibility_();
     if (state.useTime) {
@@ -1332,10 +1437,14 @@
         throw new Error(cfg && cfg.error ? cfg.error : 'bad_response');
       }
       // 2026-09-16 추가 - 점검모드면 목록은 무시하고 점검 안내만 보여준다.
-      if (window.dsCheckMaintenance_(cfg)) { el('rangeCheckingHint').classList.add('hidden'); window.dsSyncPill_(null); return; }
+      // 관리자 전용 링크(?admin_key=)로 들어온 경우엔 점검중이어도 계속 쓸 수 있게 한다(2026-11-12 - 달력은 되는데 이 화면만 막혀 있었음).
+      if (!window.dsAdminKey_ && window.dsCheckMaintenance_(cfg)) { el('rangeCheckingHint').classList.add('hidden'); window.dsSyncPill_(null); return; }
       window.dsCacheSet_('config', cfg);
       window.dsSyncPill_(null);
       state.scanners = cfg.scanners;
+      state.employees = cfg.employees || [];
+      renderRenterSelect_();
+      syncEmployee_();
       if (state.selectedScanner && !findScanner(state.selectedScanner)) state.selectedScanner = null;
       // 목록은 항상 접어둔 채로 시작한다("스캐너 목록 보기"를 눌러야 펼쳐짐,
       // 2026-09-08 사장님 요청) - renderAll() 안에서 renderScannerPicker()가
@@ -1392,6 +1501,9 @@
     if (!cached || !cached.scanners || cached.maintenance_mode) return;
     try {
       state.scanners = cached.scanners;
+      state.employees = cached.employees || [];
+      renderRenterSelect_();
+      syncEmployee_();
       if (state.selectedScanner && !findScanner(state.selectedScanner)) state.selectedScanner = null;
       renderAll();
       window.dsSyncPill_('syncing');
