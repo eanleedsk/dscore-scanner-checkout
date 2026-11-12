@@ -1128,7 +1128,7 @@
         '</div>' +
         '<div class="stepper-field">' +
           '<div class="field-label">치과 / 행사명 (선택)</div>' +
-          '<input type="text" id="inlineEditPlace" maxlength="60" placeholder="예: 인생플란트치과, 대구 세미나">' +
+          '<input type="text" id="inlineEditPlace" maxlength="60" placeholder="예: ○○치과, ○○ 세미나">' +
         '</div>' +
         '<div class="stepper-field">' +
           '<div class="field-label">시작일</div>' +
@@ -1861,7 +1861,7 @@
         return;
       }
       if (!q) {
-        results.innerHTML = '<div class="sr-hint">이름이나 치과명 일부만 입력해도 찾아요(예: Paul, 바른).<br>' +
+        results.innerHTML = '<div class="sr-hint">이름이나 치과명 일부만 입력해도 찾아요(예: 홍길동, ○○치과).<br>' +
             '지금 대여중이거나 앞으로 잡힌 예약을 찾을 수 있어요.</div>';
         return;
       }
