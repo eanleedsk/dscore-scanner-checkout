@@ -118,6 +118,46 @@
     }
     .guide-btn:active { background: var(--bg); }
     .search-btn { color: var(--navy); }
+    /* 일괄예약(2026-11-12 사장님 요청 - 세미나/전시회용 여러 장비 한 번에 예약·취소를 달력에서) */
+    .bulk-btn {
+      border: 1.5px solid var(--border); background: var(--surface); color: var(--navy); font-weight: 700;
+      font-size: 11.5px; padding: 6px 10px; border-radius: 999px; cursor: pointer; font-family: inherit; white-space: nowrap;
+    }
+    .bulk-btn:active { background: var(--bg); }
+    .confirm-sheet.bulk-sheet { max-height: 92vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .bk-tabs { display: flex; gap: 6px; margin: 4px 0 14px; background: var(--bg); border-radius: 10px; padding: 4px; }
+    .confirm-sheet .bk-tab {
+      flex: 1; padding: 9px; border-radius: 8px; background: transparent; color: var(--muted); font-size: 13.5px; font-weight: 700;
+    }
+    .confirm-sheet .bk-tab.active { background: var(--surface); color: var(--navy); box-shadow: 0 1px 3px rgba(10,37,64,0.12); }
+    .bk-dates { display: flex; gap: 8px; }
+    .bk-dates > div { flex: 1; min-width: 0; }
+    .bk-dates input[type="date"] {
+      width: 100%; height: 48px; border-radius: 10px; border: 1.5px solid var(--border); font-family: inherit;
+      font-size: 16px; padding: 0 8px; background: var(--surface); color: var(--text);
+    }
+    .stepper-field input[type="password"] {
+      width: 100%; box-sizing: border-box; font-size: 16px; height: 48px; border-radius: 10px;
+      border: 1.5px solid var(--border); font-family: inherit; padding: 0 12px;
+    }
+    .bk-list-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .bk-list-head .field-label { margin: 0; }
+    .confirm-sheet .bk-link {
+      flex: none; padding: 4px 6px; background: none; color: var(--brand-dark); font-size: 12.5px; font-weight: 700; border-radius: 6px;
+    }
+    .bk-list { border: 1px solid var(--border); border-radius: 10px; max-height: 250px; overflow-y: auto; }
+    .bk-group { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: var(--bg); font-size: 12px; font-weight: 800; color: var(--navy); }
+    .bk-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-top: 1px solid var(--border); font-size: 13.5px; cursor: pointer; }
+    .bk-item input { width: 20px; height: 20px; flex: none; accent-color: var(--brand); }
+    .bk-item .bk-sub { color: var(--muted); font-size: 11.5px; }
+    .bk-item.busy { color: var(--muted); cursor: default; }
+    .bk-item.busy .bk-sub { color: #B3261E; }
+    .bk-cancel-item {
+      display: block; width: 100%; text-align: left; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--border);
+      background: var(--surface); font-family: inherit; font-size: 13.5px; font-weight: 700; color: var(--text); margin-bottom: 6px; cursor: pointer;
+    }
+    .confirm-sheet .bk-cancel-item { flex: none; font-size: 13.5px; padding: 11px 12px; }
+    .bk-cancel-item span { display: block; font-weight: 500; color: var(--muted); font-size: 12px; margin-top: 2px; }
     .search-btn svg { width: 13px; height: 13px; }
 
     /* 예약 찾기(2026-10-13 사장님 요청 - "이름/치과명 검색"). 이미 받아둔 예약
@@ -533,6 +573,7 @@
       </svg>
     </button>
     <button class="guide-btn" id="guideBtn" type="button" aria-label="이용 가이드">?</button>
+    <button class="bulk-btn" id="bulkBtn" type="button">일괄예약</button>
   </div>
 </header>
 
@@ -1933,6 +1974,227 @@
   }
   el('searchBtn').onclick = openSearchSheet_;
 
+  // ---- 일괄예약/일괄취소(2026-11-12 사장님 요청 - "일괄 예약하는거 좀더 간편하게",
+  // "사이트 달력에서 할수있게") ----
+  // 세미나·전시회처럼 장비 여러 대를 같은 기간으로 한 번에 막거나 푼다. 구글시트를
+  // 열지 않고 달력에서 기간·장비를 골라 실행한다. 아무나 장비 전체를 막으면 안 되므로
+  // 관리자 암호를 서버에서 확인한다(이 브라우저 탭을 닫기 전까지만 기억).
+  var ADMIN_PW_KEY = 'dsBulkAdminPw';
+  function openBulkSheet_() {
+    if (!lastData) { showAlert('예약 목록을 불러오는 중이에요. 잠시 후 다시 눌러주세요.'); return; }
+    var todayIso = toISO(new Date());
+    var scanners = lastData.scanners || [];
+    var employees = lastData.employees || [];
+    var models = window.dsUniqueModels_(scanners);
+    var savedPw = '';
+    try { savedPw = sessionStorage.getItem(ADMIN_PW_KEY) || ''; } catch (e) { /* 무시 */ }
+
+    var backdrop = document.createElement('div');
+    backdrop.className = 'confirm-backdrop';
+    backdrop.innerHTML =
+      '<div class="confirm-sheet bulk-sheet" role="dialog" aria-label="일괄 예약">' +
+        '<h3>일괄 예약</h3>' +
+        '<div class="bk-tabs"><button type="button" class="bk-tab active" data-tab="reserve">예약하기</button>' +
+          '<button type="button" class="bk-tab" data-tab="cancel">취소하기</button></div>' +
+        '<div id="bkReservePane">' +
+          '<div class="stepper-field"><div class="field-label">행사명</div>' +
+            '<input type="text" id="bkPlace" maxlength="60" placeholder="예: ○○ 세미나, ○○ 전시회"></div>' +
+          '<div class="stepper-field"><div class="field-label">담당자 (선택)</div><select id="bkRenter"></select></div>' +
+          '<div class="stepper-field bk-dates">' +
+            '<div><div class="field-label">시작일</div><input type="date" id="bkStart" min="' + todayIso + '"></div>' +
+            '<div><div class="field-label">종료일</div><input type="date" id="bkEnd" min="' + todayIso + '"></div>' +
+          '</div>' +
+          '<div class="stepper-field">' +
+            '<div class="bk-list-head"><div class="field-label" id="bkCount">장비 선택</div>' +
+              '<span><button type="button" class="bk-link" id="bkAll">빈 장비 전체 선택</button>' +
+              '<button type="button" class="bk-link" id="bkNone">해제</button></span></div>' +
+            '<div class="bk-list" id="bkList"></div>' +
+          '</div>' +
+        '</div>' +
+        '<div id="bkCancelPane" style="display:none;"><div class="sr-hint" id="bkCancelHint"></div><div id="bkCancelList"></div></div>' +
+        '<div class="stepper-field"><div class="field-label">관리자 암호</div>' +
+          '<input type="password" id="bkPw" autocomplete="off" placeholder="관리자만 실행할 수 있어요"></div>' +
+        '<button class="confirm-btn" id="bkSubmit" type="button" style="width:100%;">예약하기</button>' +
+        '<div class="btn-row" style="margin-top:10px;"><button class="cancel-btn" type="button">닫기</button></div>' +
+      '</div>';
+    document.body.appendChild(backdrop);
+    openSheetAnim_(backdrop);
+    function q(sel) { return backdrop.querySelector(sel); }
+    q('#bkPw').value = savedPw;
+    var renterSel = q('#bkRenter');
+    [''].concat(employees).forEach(function(nm) {
+      var opt = document.createElement('option');
+      opt.value = nm; opt.textContent = nm || '선택 안 함';
+      renterSel.appendChild(opt);
+    });
+    var checked = {};
+
+    // 고른 기간에 그 장비를 막고 있는 예약(있으면). 연체 건은 오늘까지 쓰는 것으로 본다.
+    function blockerOf(scannerId, start, end) {
+      var list = lastByScanner[scannerId] || [];
+      for (var i = 0; i < list.length; i++) {
+        var x = list[i];
+        if (x.status === '반납완료') continue;
+        if (x.start_date <= end && start <= (x.blockEnd || x.end_date)) return x;
+      }
+      return null;
+    }
+    function renderList() {
+      var start = q('#bkStart').value, end = q('#bkEnd').value;
+      var hasRange = !!(start && end && end >= start);
+      var html = '';
+      models.forEach(function(model) {
+        html += '<div class="bk-group"><span>' + escapeHtml_(model) + '</span>' +
+            '<button type="button" class="bk-link" data-model="' + escapeHtml_(model) + '">이 그룹 전체</button></div>';
+        scanners.filter(function(sc) { return sc.model === model; }).forEach(function(sc) {
+          var blocker = hasRange ? blockerOf(sc.scanner_id, start, end) : null;
+          var busyText = sc.maintenance ? '점검/수리중' : blocker
+              ? (blocker.employee_name + ' ' + shortDate_(blocker.start_date) + '~' + shortDate_(blocker.blockEnd || blocker.end_date)) : '';
+          if (busyText) delete checked[sc.scanner_id];
+          html += '<label class="bk-item' + (busyText ? ' busy' : '') + '">' +
+              '<input type="checkbox" data-id="' + escapeHtml_(sc.scanner_id) + '"' + (checked[sc.scanner_id] ? ' checked' : '') +
+              (busyText ? ' disabled' : '') + '>' +
+              '<span><b>' + escapeHtml_(sc.label) + '</b> <span class="bk-sub">' + escapeHtml_(sc.scanner_id) +
+              (busyText ? ' · ' + escapeHtml_(busyText) : '') + '</span></span></label>';
+        });
+      });
+      q('#bkList').innerHTML = html;
+      updateCount();
+    }
+    function freeIds(model) {
+      return Array.prototype.map.call(q('#bkList').querySelectorAll('input[type=checkbox]:not(:disabled)'), function(c) { return c.getAttribute('data-id'); })
+          .filter(function(id) { return !model || scanners.some(function(sc) { return sc.scanner_id === id && sc.model === model; }); });
+    }
+    function updateCount() {
+      var n = Object.keys(checked).length;
+      q('#bkCount').textContent = '장비 선택 (' + n + '대)';
+      if (mode === 'reserve') q('#bkSubmit').textContent = n ? (n + '대 예약하기') : '예약하기';
+    }
+    q('#bkList').addEventListener('change', function(e) {
+      var id = e.target.getAttribute && e.target.getAttribute('data-id');
+      if (!id) return;
+      if (e.target.checked) checked[id] = true; else delete checked[id];
+      updateCount();
+    });
+    q('#bkList').addEventListener('click', function(e) {
+      var model = e.target.getAttribute && e.target.getAttribute('data-model');
+      if (!model) return;
+      var ids = freeIds(model);
+      var allOn = ids.length && ids.every(function(id) { return checked[id]; });
+      ids.forEach(function(id) { if (allOn) delete checked[id]; else checked[id] = true; });
+      renderList();
+    });
+    q('#bkAll').onclick = function() { freeIds('').forEach(function(id) { checked[id] = true; }); renderList(); };
+    q('#bkNone').onclick = function() { checked = {}; renderList(); };
+    q('#bkStart').addEventListener('change', function() {
+      var st = q('#bkStart').value;
+      q('#bkEnd').min = st || todayIso;
+      if (st && (!q('#bkEnd').value || q('#bkEnd').value < st)) q('#bkEnd').value = st;
+      renderList();
+    });
+    q('#bkEnd').addEventListener('change', renderList);
+
+    // 취소: 같은 이름·같은 기간으로 2대 이상 잡힌 예약 묶음(=일괄예약으로 보이는 것)
+    var cancelGroups = [];
+    function renderCancel() {
+      var map = {};
+      (lastData.reservations || []).forEach(function(r) {
+        if (r.status === '반납완료') return;
+        var key = r.employee_name + '|' + r.start_date + '|' + r.end_date;
+        (map[key] = map[key] || []).push(r);
+      });
+      cancelGroups = Object.keys(map).map(function(k) { return map[k]; }).filter(function(g) { return g.length >= 2; })
+          .sort(function(a, b) { return a[0].start_date < b[0].start_date ? -1 : 1; });
+      q('#bkCancelHint').innerHTML = cancelGroups.length
+          ? '취소할 묶음을 누르면 그 예약들이 한 번에 취소(대여중이면 반납) 처리돼요.'
+          : '같은 이름·같은 기간으로 2대 이상 잡힌 예약이 없어요.';
+      q('#bkCancelList').innerHTML = cancelGroups.map(function(g, i) {
+        return '<button type="button" class="bk-cancel-item" data-idx="' + i + '">' + escapeHtml_(g[0].employee_name) +
+            '<span>' + g[0].start_date + ' ~ ' + g[0].end_date + ' · ' + g.length + '대</span></button>';
+      }).join('');
+    }
+    q('#bkCancelList').addEventListener('click', function(e) {
+      var btn = e.target.closest ? e.target.closest('.bk-cancel-item') : null;
+      if (!btn) return;
+      var g = cancelGroups[Number(btn.getAttribute('data-idx'))];
+      var pw = q('#bkPw').value;
+      if (!pw) { showAlert('관리자 암호를 입력해주세요.'); return; }
+      showConfirm('"' + g[0].employee_name + '" 예약 ' + g.length + '대(' + g[0].start_date + ' ~ ' + g[0].end_date +
+          ')를 한 번에 취소할까요?', function() {
+        send('bulk_cancel', { reservation_ids: g.map(function(r) { return r.reservation_id; }) }, '취소');
+      }, { okText: g.length + '대 취소', cancelText: '닫기' });
+    });
+
+    var mode = 'reserve';
+    Array.prototype.forEach.call(backdrop.querySelectorAll('.bk-tab'), function(tab) {
+      tab.onclick = function() {
+        mode = tab.getAttribute('data-tab');
+        Array.prototype.forEach.call(backdrop.querySelectorAll('.bk-tab'), function(t) { t.classList.toggle('active', t === tab); });
+        q('#bkReservePane').style.display = mode === 'reserve' ? '' : 'none';
+        q('#bkCancelPane').style.display = mode === 'cancel' ? '' : 'none';
+        q('#bkSubmit').style.display = mode === 'reserve' ? '' : 'none';
+        if (mode === 'cancel') renderCancel(); else updateCount();
+      };
+    });
+
+    var busy = false;
+    function send(action, body, word) {
+      if (busy) return;
+      var pw = q('#bkPw').value;
+      busy = true;
+      var btn = q('#bkSubmit');
+      var orig = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '처리 중... (장비가 많으면 1분쯤 걸려요)';
+      body.admin_password = pw;
+      postJson_(action, body).then(function(data) {
+        busy = false; btn.disabled = false; btn.textContent = orig;
+        if (data.status !== 'ok') {
+          if (data.error === 'wrong_admin_password') {
+            try { sessionStorage.removeItem(ADMIN_PW_KEY); } catch (e) { /* 무시 */ }
+            showAlert('관리자 암호가 맞지 않습니다.', { tone: 'warn' });
+          } else {
+            showAlert(word + '하지 못했습니다: ' + (data.error || '알 수 없는 오류'));
+          }
+          return;
+        }
+        try { sessionStorage.setItem(ADMIN_PW_KEY, pw); } catch (e) { /* 무시 */ }
+        var total = data.ok.length + data.failed.length;
+        var msg = total + '대 중 ' + data.ok.length + '대 ' + word + ' 완료';
+        if (data.failed.length) {
+          msg += '\n\n안 된 장비:\n' + data.failed.map(function(f) { return '· ' + f.label + ' - ' + f.reason; }).join('\n');
+        }
+        dsCloseOverlay_();
+        // 창을 닫는 처리(뒤로가기 기록 정리)가 끝난 뒤에 결과 안내를 띄운다 - 바로 띄우면
+        // 닫히는 동작이 새 안내창을 대신 닫아버린다.
+        setTimeout(function() { showAlert(msg, data.failed.length ? { tone: 'warn' } : undefined); }, 300);
+        load();
+      }).catch(function(err) {
+        busy = false; btn.disabled = false; btn.textContent = orig;
+        showAlert('연결에 실패했습니다: ' + err + '\n일부만 처리됐을 수 있으니 새로고침해서 달력을 확인해주세요.');
+      });
+    }
+    q('#bkSubmit').onclick = function() {
+      var place = q('#bkPlace').value.trim();
+      var renter = renterSel.value;
+      var start = q('#bkStart').value, end = q('#bkEnd').value;
+      var ids = Object.keys(checked);
+      if (!place) { showAlert('행사명을 입력해주세요.'); return; }
+      if (!start || !end || end < start) { showAlert('시작일과 종료일을 확인해주세요.'); return; }
+      if (!ids.length) { showAlert('예약할 장비를 하나 이상 골라주세요.'); return; }
+      if (!q('#bkPw').value) { showAlert('관리자 암호를 입력해주세요.'); return; }
+      var name = renter ? (renter + ' (' + place + ')') : place;
+      showConfirm('"' + name + '" 이름으로 ' + start + ' ~ ' + end + ' 기간에 장비 ' + ids.length + '대를 예약할까요?', function() {
+        send('bulk_reserve', { scanner_ids: ids, employee_name: name, renter_name: renter, place_name: place,
+                               start_date: start, end_date: end }, '예약');
+      }, { okText: ids.length + '대 예약', cancelText: '취소' });
+    };
+    backdrop.querySelector('.cancel-btn').onclick = function() { dsCloseOverlay_(); };
+    backdrop.addEventListener('click', function(e) { if (e.target === backdrop) dsCloseOverlay_(); });
+    renderList();
+  }
+  el('bulkBtn').onclick = openBulkSheet_;
+
   // 2026-09-10 사장님 요청 - 긴 안내 문구를 지우고 "?" 아이콘 하나로 숨겨둔다.
   el('guideBtn').onclick = function() {
     showAlert('👆 스캐너 이름(예: 쇼룸 1번)을 누르면 큰 달력으로 더 편하게 예약할 수 있어요.\n\n' +
@@ -1940,6 +2202,7 @@
         '색이 칠해진 막대(이미 있는 예약)를 누르면 삭제할지 물어봐요.\n\n' +
         '막대를 꾹 누른 채 옆으로 끌면 날짜를 옮길 수 있고, 막대 양 끝을 꾹 누른 채 끌면 기간을 늘리거나 줄일 수 있어요. 그냥 스치듯 밀면 달력이 넘어가요.\n\n' +
         '돋보기 버튼을 누르면 이름이나 치과명으로 예약을 찾을 수 있어요.\n\n' +
+        '"일괄예약" 버튼은 세미나·전시회처럼 장비 여러 대를 한 번에 예약하거나 취소할 때 써요(관리자 암호 필요).\n\n' +
         '빨간 줄무늬 막대는 반납예정일이 지났는데 아직 반납 안 된(연체) 예약이에요. 반납될 때까지 오늘까지 이어져 보이고, 누르면 바로 반납할 수 있어요.\n\n' +
         '모델 이름이 적힌 구분줄을 누르면 그 그룹을 접었다 펼 수 있어요.');
   };
