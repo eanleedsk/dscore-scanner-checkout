@@ -298,6 +298,10 @@
       touch-action: manipulation;
     }
     .date-stepper .step-btn:active { background: #DCE2E3; }
+    .stepper-field select {
+      width: 100%; box-sizing: border-box; font-size: 16px; height: 48px; border-radius: 10px;
+      border: 1.5px solid var(--border); font-family: inherit; padding: 0 12px; background: var(--surface); color: var(--text);
+    }
     .stepper-field input[type="text"] {
       width: 100%; box-sizing: border-box; text-align: left; font-size: 16px; height: 48px;
       border-radius: 10px; border: 1.5px solid var(--border); font-family: inherit; padding: 0 12px;
@@ -1081,6 +1085,31 @@
   // 사장님 요청). 확인 절차 없이 달력에서 바로 삭제되도록 골랐으므로, 여기서
   // 곧장 반납 처리를 호출한다. 기간만 바꾸고 싶을 때를 위해 저장/취소와 함께
   // 시작일/반납예정일 칸도 같이 보여준다.
+  // 예약 한 건을 담당자/치과·행사명으로 나눈다. 따로 저장된 값이 있으면 그대로, 예전에
+  // 한 칸으로 적은 예약("Moon 인생플란트치과", "Paul(서울바른휘치과)")은 이름이 직원
+  // 이름으로 시작하고 바로 뒤가 띄어쓰기나 괄호면 거기서 나눈다. 못 나누면 전체를 담당자로.
+  function splitRenterPlace_(res, employees) {
+    if (res.renter_name) return { renter: res.renter_name, place: res.place_name || '' };
+    var name = String(res.employee_name || '').trim();
+    var best = '';
+    (employees || []).forEach(function(nm) {
+      if (nm.length <= best.length) return;
+      if (name.toLowerCase().indexOf(nm.toLowerCase()) !== 0) return;
+      var next = name.charAt(nm.length);
+      if (next === '' || next === ' ' || next === '(') best = nm;
+    });
+    if (!best) return { renter: name, place: '' };
+    var rest = name.slice(best.length).trim();
+    if (rest.charAt(0) === '(' && rest.charAt(rest.length - 1) === ')') rest = rest.slice(1, -1).trim();
+    return { renter: best, place: rest };
+  }
+
+  // 같은 장비에 반납예정일이 지났는데 아직 반납 처리 안 된 다른 예약들(2026-11-12 -
+  // 반납할 때 "앞 예약도 함께 반납 처리할까요?"를 물어보는 데 쓴다).
+  function staleOverdueOthers_(scannerId, exceptId) {
+    return (lastByScanner[scannerId] || []).filter(function(x) { return x.overdue && x.reservation_id !== exceptId; });
+  }
+
   function showDeleteConfirmSheet(scannerId, scannerLabel, res, barEl) {
     var backdrop = document.createElement('div');
     backdrop.className = 'confirm-backdrop';
@@ -1093,8 +1122,13 @@
         '<p>' + res.employee_name + '님' + ((res.start_time && res.end_time) ? (' ' + res.start_time + '~' + res.end_time) : '') +
           ' · ' + res.start_date + ' ~ ' + res.end_date + ' (' + (res.overdue ? '반납예정일 지남' : res.status) + ')</p>' +
         '<div class="stepper-field">' +
-          '<div class="field-label">예약자 이름</div>' +
-          '<input type="text" id="inlineEditName" maxlength="60">' +
+          '<div class="field-label">담당자</div>' +
+          '<select id="inlineEditRenter" aria-label="담당자 선택"></select>' +
+          '<input type="text" id="inlineEditName" maxlength="60" placeholder="담당자 이름을 입력해주세요" style="margin-top:8px; display:none;">' +
+        '</div>' +
+        '<div class="stepper-field">' +
+          '<div class="field-label">치과 / 행사명 (선택)</div>' +
+          '<input type="text" id="inlineEditPlace" maxlength="60" placeholder="예: 인생플란트치과, 대구 세미나">' +
         '</div>' +
         '<div class="stepper-field">' +
           '<div class="field-label">시작일</div>' +
@@ -1121,7 +1155,31 @@
     document.body.appendChild(backdrop);
     // 따옴표가 든 이름이 화면을 깨뜨리지 않도록, 글자는 HTML에 직접 넣지 않고
     // 자바스크립트로 값만 채운다(값으로 넣으면 자동으로 안전하게 처리됨).
-    backdrop.querySelector('#inlineEditName').value = res.employee_name;
+    // 2026-11-12 사장님 요청 - 담당자(직원목록에서 선택)와 치과/행사명을 따로 받는다.
+    // 예전에 한 칸으로 적은 예약은 이름 앞부분이 직원 이름이면 자동으로 나눠서 보여준다.
+    var CUSTOM_RENTER = '__custom__';
+    var employees = (lastData && lastData.employees) || [];
+    var parts = splitRenterPlace_(res, employees);
+    var renterSel = backdrop.querySelector('#inlineEditRenter');
+    var renterInput = backdrop.querySelector('#inlineEditName');
+    employees.forEach(function(nm) {
+      var opt = document.createElement('option');
+      opt.value = nm; opt.textContent = nm;
+      renterSel.appendChild(opt);
+    });
+    var customOpt = document.createElement('option');
+    customOpt.value = CUSTOM_RENTER; customOpt.textContent = '목록에 없음 (직접 입력)';
+    renterSel.appendChild(customOpt);
+    var renterInList = employees.indexOf(parts.renter) >= 0;
+    renterSel.value = renterInList ? parts.renter : CUSTOM_RENTER;
+    renterInput.value = renterInList ? '' : parts.renter;
+    renterInput.style.display = renterInList ? 'none' : '';
+    renterSel.onchange = function() {
+      var custom = renterSel.value === CUSTOM_RENTER;
+      renterInput.style.display = custom ? '' : 'none';
+      if (custom) renterInput.focus();
+    };
+    backdrop.querySelector('#inlineEditPlace').value = parts.place;
     openSheetAnim_(backdrop);
     function closeSheet() { dsCloseOverlay_(); }
     backdrop.querySelector('.cancel-btn').onclick = closeSheet;
@@ -1144,11 +1202,14 @@
     function saveEdit() {
       var newStart = backdrop.querySelector('#inlineEditStart').value;
       var newEnd = backdrop.querySelector('#inlineEditEnd').value;
-      var newName = backdrop.querySelector('#inlineEditName').value.trim();
-      if (!newName) {
-        showAlert('예약자 이름을 입력해주세요.');
+      var newRenter = renterSel.value === CUSTOM_RENTER ? renterInput.value.trim() : renterSel.value;
+      var newPlace = backdrop.querySelector('#inlineEditPlace').value.trim();
+      if (!newRenter) {
+        showAlert('담당자를 선택하거나 입력해주세요.');
         return;
       }
+      // 화면에 보이는 이름은 예전처럼 "담당자 (치과/행사명)"으로 합친다.
+      var newName = newRenter + (newPlace ? ' (' + newPlace + ')' : '');
       if (!newStart || !newEnd || newEnd < newStart) {
         showAlert('날짜를 다시 확인해주세요(반납예정일이 시작일보다 빠를 수 없어요).');
         return;
@@ -1161,9 +1222,13 @@
           start_date: newStart,
           end_date: newEnd,
           employee_name: newName,
+          renter_name: newRenter,
+          place_name: newPlace,
         }).then(function(data) {
         if (data.status === 'ok') {
           res.employee_name = newName;
+          res.renter_name = newRenter;
+          res.place_name = newPlace;
           closeSheet();
           res.start_date = newStart;
           res.end_date = newEnd;
@@ -1307,6 +1372,18 @@
     // 빈 값으로 부르면 사진 없이 반납된다(서버 쪽은 원래도 사진을 필수로 요구한
     // 적이 없음, 화면에서만 막고 있었음).
     function doReturnRequest_(btn, busyText, doneText, photoOverall, photoParts) {
+      // 장비는 돌려놨는데 "반납"을 안 눌러 연체로 남은 앞 예약이 있으면 같이 정리할지
+      // 물어본다(2026-11-12 사장님 요청). 창을 그냥 닫으면 아무것도 안 보낸다.
+      var stale = staleOverdueOthers_(scannerId, res.reservation_id);
+      if (!stale.length) { sendReturn_(btn, busyText, doneText, photoOverall, photoParts, false); return; }
+      var lines = stale.map(function(x) { return '· ' + x.employee_name + ' (' + x.start_date + ' ~ ' + x.end_date + ')'; }).join('\n');
+      showConfirm('이 장비에 반납예정일이 지났는데 아직 반납 처리가 안 된 다른 예약이 있어요.\n' + lines +
+          '\n\n장비가 실제로 돌아와 있다면, 이 예약들도 함께 반납 처리할까요?',
+          function() { sendReturn_(btn, busyText, doneText, photoOverall, photoParts, true); },
+          { okText: '함께 반납 처리', cancelText: '이 건만 반납',
+            onCancel: function() { sendReturn_(btn, busyText, doneText, photoOverall, photoParts, false); } });
+    }
+    function sendReturn_(btn, busyText, doneText, photoOverall, photoParts, closePrev) {
       btn.disabled = true;
       var origText = btn.textContent;
       btn.textContent = busyText;
@@ -1314,6 +1391,7 @@
           reservation_id: res.reservation_id,
           scanner_id: scannerId,
           employee_name: res.employee_name,
+          close_previous: closePrev === true,
           photo_return_base64: photoOverall || '',
           photo_return_parts_base64: photoParts || '',
         }).then(function(data) {
